@@ -86,12 +86,39 @@ jobs:
         run: |
           choco install innosetup -y
 
+      - name: Create installer output directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist\installer"
+
       - name: Build Windows Installer (Inno Setup)
         shell: pwsh
         run: |
-          # Build installer using our .iss script
-          $env:Path += ";C:\\Program Files (x86)\\Inno Setup 6";
-          iscc installer\\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
+          # Check Inno Setup installation
+          $innoPath = @(
+            "C:\Program Files (x86)\Inno Setup 6",
+            "C:\Program Files\Inno Setup 6",
+            "C:\Program Files (x86)\Inno Setup 5"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          
+          if (-not $innoPath) {
+            Write-Error "Inno Setup not found in expected locations"
+            exit 1
+          }
+          
+          Write-Host "Using Inno Setup at: $innoPath"
+          $env:Path += ";$innoPath"
+          
+          # Verify source directory exists
+          if (-not (Test-Path "dist\DesktopPet")) {
+            Write-Error "Source directory dist\DesktopPet not found"
+            Get-ChildItem dist -Recurse
+            exit 1
+          }
+          
+          # Build installer
+          Write-Host "Building installer with version: ${{ env.VERSION }}"
+          iscc installer\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
 
       - name: Upload artifacts (Installer)
         uses: actions/upload-artifact@v4
