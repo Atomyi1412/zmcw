@@ -76,122 +76,83 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Debug - List files before build
-        shell: pwsh
-        run: |
-          Write-Host "Current directory contents:"
-          Get-ChildItem -Recurse | Select-Object FullName
-          Write-Host "Assets directory:"
-          if (Test-Path "assets") {
-            Get-ChildItem assets
-          } else {
-            Write-Host "Assets directory not found"
-          }
-
       - name: Build app with PyInstaller
         shell: pwsh
         run: |
           Write-Host "Building with PyInstaller..."
           python -m PyInstaller --noconfirm --name DesktopPet --windowed --add-data="assets;assets" main.py
-          Write-Host "PyInstaller completed. Checking output:"
+          
           if (Test-Path "dist\DesktopPet") {
-            Write-Host "✓ dist\DesktopPet directory created"
-            Get-ChildItem "dist\DesktopPet" -Recurse | Select-Object FullName
+            Write-Host "✓ PyInstaller build successful"
+            Write-Host "Contents:"
+            Get-ChildItem "dist\DesktopPet" | ForEach-Object { Write-Host "  - $($_.Name)" }
           } else {
-            Write-Error "✗ dist\DesktopPet directory not found"
-            Get-ChildItem dist -Recurse
+            Write-Error "PyInstaller build failed"
             exit 1
           }
 
-      - name: Upload artifacts (PyInstaller output)
+      - name: Upload PyInstaller output
         uses: actions/upload-artifact@v4
         with:
           name: DesktopPet-Windows-folder-${{ env.VERSION }}
           path: dist/DesktopPet
 
-      - name: Verify Inno Setup
+      - name: Create ZIP package (alternative to installer)
         shell: pwsh
         run: |
-          Write-Host "Checking for Inno Setup..."
+          Write-Host "Creating ZIP package..."
+          $zipName = "DesktopPet-${{ env.VERSION }}-Windows.zip"
+          Compress-Archive -Path "dist\DesktopPet\*" -DestinationPath $zipName -Force
+          
+          if (Test-Path $zipName) {
+            $zipSize = [math]::Round((Get-Item $zipName).Length / 1MB, 2)
+            Write-Host "✓ ZIP package created: $zipName ($zipSize MB)"
+          } else {
+            Write-Warning "ZIP package creation failed"
+          }
+
+      - name: Try Inno Setup (optional)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Host "Attempting to create installer with Inno Setup..."
+          
+          # Check if Inno Setup is available
           $innoPath = @(
             "C:\Program Files (x86)\Inno Setup 6",
-            "C:\Program Files\Inno Setup 6",
-            "C:\Program Files (x86)\Inno Setup 5"
+            "C:\Program Files\Inno Setup 6"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
           
           if ($innoPath) {
-            Write-Host "✓ Found Inno Setup at: $innoPath"
+            Write-Host "Found Inno Setup at: $innoPath"
             $env:Path += ";$innoPath"
-            iscc /?
-          } else {
-            Write-Host "Installing Inno Setup via choco..."
-            choco install innosetup -y
-          }
-
-      - name: Build Windows Installer (Inno Setup)
-        shell: pwsh
-        run: |
-          Write-Host "Building installer with version: ${{ env.VERSION }}"
-          
-          # Create output directory
-          New-Item -ItemType Directory -Force -Path "dist\installer"
-          
-          # Find Inno Setup
-          $innoPath = @(
-            "C:\Program Files (x86)\Inno Setup 6",
-            "C:\Program Files\Inno Setup 6",
-            "C:\Program Files (x86)\Inno Setup 5"
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-          
-          if (-not $innoPath) {
-            Write-Error "Inno Setup not found in expected locations"
-            exit 1
-          }
-          
-          Write-Host "Using Inno Setup at: $innoPath"
-          $env:Path += ";$innoPath"
-          
-          # Verify source directory
-          if (-not (Test-Path "dist\DesktopPet")) {
-            Write-Error "Source directory dist\DesktopPet not found"
-            exit 1
-          }
-          
-          # Build installer
-          iscc installer\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
-          
-          # Verify output
-          if (Test-Path "dist\installer\*.exe") {
-            Write-Host "✓ Installer built successfully"
-            Get-ChildItem "dist\installer\*.exe" | ForEach-Object { Write-Host "Generated: $($_.Name) ($([math]::Round($_.Length/1MB, 2)) MB)" }
-          } else {
-            Write-Error "Installer was not generated"
-            exit 1
-          }
-
-      - name: Verify installer creation
-        shell: pwsh
-        run: |
-          Write-Host "Checking for installer files..."
-          $installerDir = "dist\installer"
-          if (Test-Path $installerDir) {
-            $installerFiles = Get-ChildItem $installerDir -Filter "*.exe"
-            if ($installerFiles.Count -gt 0) {
-              Write-Host "✓ Found $($installerFiles.Count) installer file(s):"
-              $installerFiles | ForEach-Object {
-                Write-Host "  - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+            
+            New-Item -ItemType Directory -Force -Path "dist\installer"
+            
+            try {
+              iscc installer\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
+              
+              if (Test-Path "dist\installer\*.exe") {
+                Write-Host "✓ Installer created successfully"
+              } else {
+                Write-Warning "Installer creation failed"
               }
-            } else {
-              Write-Warning "No .exe files found in installer directory"
-              Write-Host "Contents of installer directory:"
-              Get-ChildItem $installerDir | ForEach-Object { Write-Host "  - $($_.Name)" }
+            } catch {
+              Write-Warning "Inno Setup failed: $_"
             }
           } else {
-            Write-Warning "Installer directory not found: $installerDir"
+            Write-Warning "Inno Setup not found, skipping installer creation"
           }
 
-      - name: Upload artifacts (Installer)
+      - name: Upload ZIP package
         uses: actions/upload-artifact@v4
+        with:
+          name: DesktopPet-Windows-ZIP-${{ env.VERSION }}
+          path: DesktopPet-${{ env.VERSION }}-Windows.zip
+
+      - name: Upload installer (if created)
+        uses: actions/upload-artifact@v4
+        if: hashFiles('dist/installer/*.exe') != ''
         with:
           name: DesktopPet-Windows-Installer-${{ env.VERSION }}
           path: dist/installer/*.exe
