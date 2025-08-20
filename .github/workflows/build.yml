@@ -97,25 +97,10 @@ jobs:
           name: DesktopPet-Windows-folder-${{ env.VERSION }}
           path: dist/DesktopPet
 
-      - name: Create ZIP package (alternative to installer)
+      - name: Create EXE installer with Inno Setup
         shell: pwsh
         run: |
-          Write-Host "Creating ZIP package..."
-          $zipName = "DesktopPet-${{ env.VERSION }}-Windows.zip"
-          Compress-Archive -Path "dist\DesktopPet\*" -DestinationPath $zipName -Force
-          
-          if (Test-Path $zipName) {
-            $zipSize = [math]::Round((Get-Item $zipName).Length / 1MB, 2)
-            Write-Host "✓ ZIP package created: $zipName ($zipSize MB)"
-          } else {
-            Write-Warning "ZIP package creation failed"
-          }
-
-      - name: Try Inno Setup (optional)
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          Write-Host "Attempting to create installer with Inno Setup..."
+          Write-Host "Creating EXE installer with Inno Setup..."
           
           # Check if Inno Setup is available
           $innoPath = @(
@@ -127,28 +112,104 @@ jobs:
             Write-Host "Found Inno Setup at: $innoPath"
             $env:Path += ";$innoPath"
             
+            # Create output directory
             New-Item -ItemType Directory -Force -Path "dist\installer"
             
+            # Get absolute paths
+            $currentDir = Get-Location
+            $sourceDir = "$currentDir\dist\DesktopPet"
+            $outputDir = "$currentDir\dist\installer"
+            
+            Write-Host "Current directory: $currentDir"
+            Write-Host "Source directory: $sourceDir"
+            Write-Host "Output directory: $outputDir"
+            
+            # Verify source exists
+            if (Test-Path $sourceDir) {
+              Write-Host "✓ Source directory exists"
+              Get-ChildItem $sourceDir | ForEach-Object { Write-Host "  - $($_.Name)" }
+            } else {
+              Write-Error "Source directory not found: $sourceDir"
+              exit 1
+            }
+            
+            # Run Inno Setup with absolute paths
+            $issCommand = "iscc"
+            $issScript = "$currentDir\installer\desktop_pet.iss"
+            $issArgs = @(
+              $issScript,
+              "/DAppVersion=${{ env.VERSION }}",
+              "/DSourceDir=$sourceDir",
+              "/DOutputDir=$outputDir",
+              "/DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup"
+            )
+            
+            Write-Host "Running: $issCommand $($issArgs -join ' ')"
+            
             try {
-              iscc installer\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
+              & $issCommand @issArgs
               
-              if (Test-Path "dist\installer\*.exe") {
-                Write-Host "✓ Installer created successfully"
+              if (Test-Path "$outputDir\*.exe") {
+                $exeFile = Get-ChildItem "$outputDir\*.exe" | Select-Object -First 1
+                $exeSize = [math]::Round($exeFile.Length / 1MB, 2)
+                Write-Host "✓ EXE installer created: $($exeFile.Name) ($exeSize MB)"
               } else {
-                Write-Warning "Installer creation failed"
+                Write-Error "Installer creation failed - no EXE file found"
+                exit 1
               }
             } catch {
-              Write-Warning "Inno Setup failed: $_"
+              Write-Error "Inno Setup failed: $_"
+              exit 1
             }
           } else {
-            Write-Warning "Inno Setup not found, skipping installer creation"
+            Write-Warning "Inno Setup not found in standard locations. Installing via Chocolatey..."
+            choco install innosetup --no-progress -y
+            
+            # Re-check installation path
+            $innoPath = @(
+              "C:\Program Files (x86)\Inno Setup 6",
+              "C:\Program Files\Inno Setup 6"
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+            
+            if (-not $innoPath) {
+              Write-Error "Inno Setup installation failed or path not found."
+              exit 1
+            }
+            
+            Write-Host "Inno Setup installed at: $innoPath"
+            $env:Path += ";$innoPath"
+            
+            # Create output directory
+            New-Item -ItemType Directory -Force -Path "dist\installer"
+            
+            # Get absolute paths
+            $currentDir = Get-Location
+            $sourceDir = "$currentDir\dist\DesktopPet"
+            $outputDir = "$currentDir\dist\installer"
+            
+            # Run Inno Setup
+            $issCommand = "iscc"
+            $issScript = "$currentDir\installer\desktop_pet.iss"
+            $issArgs = @(
+              $issScript,
+              "/DAppVersion=${{ env.VERSION }}",
+              "/DSourceDir=$sourceDir",
+              "/DOutputDir=$outputDir",
+              "/DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup"
+            )
+            
+            Write-Host "Running after install: $issCommand $($issArgs -join ' ')"
+            & $issCommand @issArgs
+            
+            if (Test-Path "$outputDir\*.exe") {
+              $exeFile = Get-ChildItem "$outputDir\*.exe" | Select-Object -First 1
+              $exeSize = [math]::Round($exeFile.Length / 1MB, 2)
+              Write-Host "✓ EXE installer created: $($exeFile.Name) ($exeSize MB)"
+            } else {
+              Write-Error "Installer creation failed - no EXE file found (post-install)"
+              exit 1
+            }
           }
-
-      - name: Upload ZIP package
-        uses: actions/upload-artifact@v4
-        with:
-          name: DesktopPet-Windows-ZIP-${{ env.VERSION }}
-          path: DesktopPet-${{ env.VERSION }}-Windows.zip
 
       - name: Upload installer (if created)
         uses: actions/upload-artifact@v4
@@ -162,4 +223,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/installer/*.exe
+            ${{ github.workspace }}/dist/installer/*.exe
