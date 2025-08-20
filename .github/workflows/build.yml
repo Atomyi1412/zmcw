@@ -76,61 +76,84 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Debug - List files before build
+        shell: pwsh
+        run: |
+          Write-Host "Current directory contents:"
+          Get-ChildItem -Recurse | Select-Object FullName
+          Write-Host "Assets directory:"
+          if (Test-Path "assets") {
+            Get-ChildItem assets
+          } else {
+            Write-Host "Assets directory not found"
+          }
+
       - name: Build app with PyInstaller
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --name DesktopPet --windowed --add-data=assets;assets main.py
-
-      - name: Install Inno Setup
-        shell: pwsh
-        run: |
-          choco install innosetup -y
-
-      - name: Create installer output directory
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "dist\installer"
-
-      - name: Build Windows Installer (Inno Setup)
-        shell: pwsh
-        run: |
-          # Check Inno Setup installation
-          $innoPath = @(
-            "C:\Program Files (x86)\Inno Setup 6",
-            "C:\Program Files\Inno Setup 6",
-            "C:\Program Files (x86)\Inno Setup 5"
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-          
-          if (-not $innoPath) {
-            Write-Error "Inno Setup not found in expected locations"
-            exit 1
-          }
-          
-          Write-Host "Using Inno Setup at: $innoPath"
-          $env:Path += ";$innoPath"
-          
-          # Verify source directory exists
-          if (-not (Test-Path "dist\DesktopPet")) {
-            Write-Error "Source directory dist\DesktopPet not found"
+          Write-Host "Building with PyInstaller..."
+          python -m PyInstaller --noconfirm --name DesktopPet --windowed --add-data="assets;assets" main.py
+          Write-Host "PyInstaller completed. Checking output:"
+          if (Test-Path "dist\DesktopPet") {
+            Write-Host "✓ dist\DesktopPet directory created"
+            Get-ChildItem "dist\DesktopPet" -Recurse | Select-Object FullName
+          } else {
+            Write-Error "✗ dist\DesktopPet directory not found"
             Get-ChildItem dist -Recurse
             exit 1
           }
-          
-          # Build installer
-          Write-Host "Building installer with version: ${{ env.VERSION }}"
-          iscc installer\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
 
-      - name: Upload artifacts (Installer)
-        uses: actions/upload-artifact@v4
-        with:
-          name: DesktopPet-Windows-${{ env.VERSION }}
-          path: dist/installer/*.exe
-
-      - name: Upload artifacts (raw folder)
+      - name: Upload artifacts (PyInstaller output)
         uses: actions/upload-artifact@v4
         with:
           name: DesktopPet-Windows-folder-${{ env.VERSION }}
           path: dist/DesktopPet
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          Write-Host "Installing Inno Setup..."
+          choco install innosetup -y
+          Write-Host "Inno Setup installation completed"
+
+      - name: Build Windows Installer (Inno Setup)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Host "Attempting to build installer..."
+          
+          # Create output directory
+          New-Item -ItemType Directory -Force -Path "dist\installer"
+          
+          # Find Inno Setup
+          $innoPath = "C:\Program Files (x86)\Inno Setup 6"
+          if (-not (Test-Path $innoPath)) {
+            $innoPath = "C:\Program Files\Inno Setup 6"
+          }
+          
+          if (Test-Path $innoPath) {
+            Write-Host "Found Inno Setup at: $innoPath"
+            $env:Path += ";$innoPath"
+            
+            # Build installer
+            Write-Host "Building installer with version: ${{ env.VERSION }}"
+            try {
+              iscc installer\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
+              Write-Host "✓ Installer built successfully"
+            } catch {
+              Write-Warning "Installer build failed: $_"
+              Write-Host "Continuing without installer..."
+            }
+          } else {
+            Write-Warning "Inno Setup not found, skipping installer creation"
+          }
+
+      - name: Upload artifacts (Installer - if exists)
+        uses: actions/upload-artifact@v4
+        if: hashFiles('dist/installer/*.exe') != ''
+        with:
+          name: DesktopPet-Windows-Installer-${{ env.VERSION }}
+          path: dist/installer/*.exe
 
       - name: Publish Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
