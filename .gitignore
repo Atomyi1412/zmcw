@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+ENV/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+
+# PyInstaller
+# Keep spec if you want, comment out next line if you prefer to commit it
+# *.spec
+DesktopPet-macOS.dmg
+
+# User data (kept per-machine, not in repo)
+settings.json
+reminders.json
