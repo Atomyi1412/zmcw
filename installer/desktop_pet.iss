@@ -12,6 +12,7 @@
 #define MyAppVersion GetStringDef("AppVersion", "0.0.0")
 #define SourceDir GetStringDef("SourceDir", "dist\\DesktopPet")
 #define OutBase GetStringDef("OutBase", "DesktopPet-Windows-Setup")
+#define OutputDir GetStringDef("OutputDir", "dist\\installer")
 
 [Setup]
 AppId={{7A9C3121-3328-4B72-9B1C-4C6C9D1B4A92}
@@ -22,7 +23,7 @@ AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=dist\installer
+OutputDir={#OutputDir}
 OutputBaseFilename={#OutBase}
 Compression=lzma
 SolidCompression=yes

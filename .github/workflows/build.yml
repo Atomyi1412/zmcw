@@ -118,39 +118,127 @@ jobs:
 
       - name: Build Windows Installer (Inno Setup)
         shell: pwsh
-        continue-on-error: true
         run: |
           Write-Host "Attempting to build installer..."
           
-          # Create output directory
-          New-Item -ItemType Directory -Force -Path "dist\installer"
+          # Create output directory with absolute path
+          $outputDir = Join-Path $PWD "dist\installer"
+          New-Item -ItemType Directory -Force -Path $outputDir
+          Write-Host "Created output directory: $outputDir"
           
           # Find Inno Setup
-          $innoPath = "C:\Program Files (x86)\Inno Setup 6"
-          if (-not (Test-Path $innoPath)) {
-            $innoPath = "C:\Program Files\Inno Setup 6"
+          $innoPaths = @(
+            "C:\Program Files (x86)\Inno Setup 6",
+            "C:\Program Files\Inno Setup 6",
+            "C:\Program Files (x86)\Inno Setup 5"
+          )
+          
+          $innoPath = $null
+          foreach ($path in $innoPaths) {
+            if (Test-Path $path) {
+              $innoPath = $path
+              break
+            }
           }
           
-          if (Test-Path $innoPath) {
-            Write-Host "Found Inno Setup at: $innoPath"
-            $env:Path += ";$innoPath"
-            
-            # Build installer
-            Write-Host "Building installer with version: ${{ env.VERSION }}"
-            try {
-              iscc installer\desktop_pet.iss /DAppVersion=${{ env.VERSION }} /DSourceDir=dist\DesktopPet /DOutBase=DesktopPet-${{ env.VERSION }}-Windows-Setup
+          if (-not $innoPath) {
+            Write-Error "Inno Setup not found in any expected location"
+            Write-Host "Searched paths:"
+            $innoPaths | ForEach-Object { Write-Host "  - $_" }
+            exit 1
+          }
+          
+          Write-Host "Found Inno Setup at: $innoPath"
+          $env:Path += ";$innoPath"
+          
+          # Verify iscc command is available
+          try {
+            $isccVersion = & iscc /?
+            Write-Host "Inno Setup Compiler is available"
+          } catch {
+            Write-Error "Failed to run iscc command: $_"
+            exit 1
+          }
+          
+          # Verify source directory exists
+          $sourceDir = Join-Path $PWD "dist\DesktopPet"
+          if (-not (Test-Path $sourceDir)) {
+            Write-Error "Source directory not found: $sourceDir"
+            Write-Host "Available directories in dist:"
+            Get-ChildItem "dist" | ForEach-Object { Write-Host "  - $($_.Name)" }
+            exit 1
+          }
+          
+          Write-Host "Source directory verified: $sourceDir"
+          
+          # Build installer with absolute paths
+          $scriptPath = Join-Path $PWD "installer\desktop_pet.iss"
+          $outputBase = "DesktopPet-${{ env.VERSION }}-Windows-Setup"
+          
+          Write-Host "Building installer with:"
+          Write-Host "  Script: $scriptPath"
+          Write-Host "  Version: ${{ env.VERSION }}"
+          Write-Host "  Source: $sourceDir"
+          Write-Host "  Output: $outputBase"
+          
+          $isccArgs = @(
+            $scriptPath,
+            "/DAppVersion=${{ env.VERSION }}",
+            "/DSourceDir=$sourceDir",
+            "/DOutBase=$outputBase",
+            "/DOutputDir=$outputDir"
+          )
+          
+          Write-Host "Running: iscc $($isccArgs -join ' ')"
+          
+          try {
+            & iscc @isccArgs
+            if ($LASTEXITCODE -eq 0) {
               Write-Host "✓ Installer built successfully"
-            } catch {
-              Write-Warning "Installer build failed: $_"
-              Write-Host "Continuing without installer..."
+              
+              # Verify output file exists
+              $expectedOutput = Join-Path $outputDir "$outputBase.exe"
+              if (Test-Path $expectedOutput) {
+                Write-Host "✓ Installer file created: $expectedOutput"
+                $fileInfo = Get-Item $expectedOutput
+                Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+              } else {
+                Write-Warning "Expected installer file not found: $expectedOutput"
+                Write-Host "Files in output directory:"
+                Get-ChildItem $outputDir | ForEach-Object { Write-Host "  - $($_.Name)" }
+              }
+            } else {
+              Write-Error "Inno Setup compilation failed with exit code: $LASTEXITCODE"
+              exit 1
             }
-          } else {
-            Write-Warning "Inno Setup not found, skipping installer creation"
+          } catch {
+            Write-Error "Failed to run Inno Setup: $_"
+            exit 1
           }
 
-      - name: Upload artifacts (Installer - if exists)
+      - name: Verify installer creation
+        shell: pwsh
+        run: |
+          Write-Host "Checking for installer files..."
+          $installerDir = "dist\installer"
+          if (Test-Path $installerDir) {
+            $installerFiles = Get-ChildItem $installerDir -Filter "*.exe"
+            if ($installerFiles.Count -gt 0) {
+              Write-Host "✓ Found $($installerFiles.Count) installer file(s):"
+              $installerFiles | ForEach-Object {
+                Write-Host "  - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+              }
+            } else {
+              Write-Warning "No .exe files found in installer directory"
+              Write-Host "Contents of installer directory:"
+              Get-ChildItem $installerDir | ForEach-Object { Write-Host "  - $($_.Name)" }
+            }
+          } else {
+            Write-Warning "Installer directory not found: $installerDir"
+          }
+
+      - name: Upload artifacts (Installer)
         uses: actions/upload-artifact@v4
-        if: hashFiles('dist/installer/*.exe') != ''
         with:
           name: DesktopPet-Windows-Installer-${{ env.VERSION }}
           path: dist/installer/*.exe
