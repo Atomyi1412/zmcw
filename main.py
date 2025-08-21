@@ -7,8 +7,9 @@
 
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon, QMenu, QAction
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 
 # 添加当前目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -67,17 +68,112 @@ def main():
         app.setApplicationVersion("1.0")
         app.setOrganizationName("DesktopPet")
         
-        # 设置应用程序图标（如果存在）
-        icon_path = resource_path("assets/icon.png")
-        if os.path.exists(icon_path):
-            from PyQt5.QtGui import QIcon
-            app.setWindowIcon(QIcon(icon_path))
+        # 防止应用在最后一个窗口关闭时退出（适用于托盘应用）
+        app.setQuitOnLastWindowClosed(False)
+        
+        # 检查系统托盘支持
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            QMessageBox.critical(None, "系统托盘", "系统不支持系统托盘功能")
+            return 1
+        
+        # 设置应用程序图标
+        tray_icon = None
+        # 优先使用狗狗头像图标
+        dog_icon_path = resource_path("assets/dog_icon.svg")
+        if os.path.exists(dog_icon_path):
+            tray_icon = QIcon(dog_icon_path)
+        else:
+            # 回退到其他图标
+            if sys.platform.startswith('darwin'):
+                icns_path = resource_path("assets/app.icns")
+                if os.path.exists(icns_path):
+                    tray_icon = QIcon(icns_path)
+            elif os.name == 'nt':
+                ico_path = resource_path("assets/app.ico")
+                if os.path.exists(ico_path):
+                    tray_icon = QIcon(ico_path)
+            
+            if not tray_icon:
+                icon_path = resource_path("assets/icon.png")
+                if os.path.exists(icon_path):
+                    tray_icon = QIcon(icon_path)
+        
+        if tray_icon:
+            app.setWindowIcon(tray_icon)
         
         # 创建桌面宠物窗口
         pet = DesktopPet()
         
-        # 显示窗口
+        # 创建系统托盘
+        if not tray_icon:
+            tray_icon = QIcon()  # 创建空图标作为默认值
+        system_tray = QSystemTrayIcon(tray_icon, app)
+        
+        # 创建托盘菜单
+        tray_menu = QMenu()
+        
+        # 显示/隐藏宠物
+        show_action = QAction("显示宠物", app)
+        hide_action = QAction("隐藏宠物", app)
+        
+        def toggle_pet_visibility():
+            if pet.isVisible():
+                pet.hide()
+                show_action.setVisible(True)
+                hide_action.setVisible(False)
+            else:
+                pet.show()
+                show_action.setVisible(False)
+                hide_action.setVisible(True)
+        
+        def show_pet():
+            pet.show()
+            show_action.setVisible(False)
+            hide_action.setVisible(True)
+        
+        def hide_pet():
+            pet.hide()
+            show_action.setVisible(True)
+            hide_action.setVisible(False)
+        
+        show_action.triggered.connect(show_pet)
+        hide_action.triggered.connect(hide_pet)
+        
+        # 设置菜单
+        settings_action = QAction("设置", app)
+        settings_action.triggered.connect(lambda: pet.show_settings_dialog())
+        
+        # 退出
+        quit_action = QAction("退出", app)
+        quit_action.triggered.connect(app.quit)
+        
+        # 添加菜单项
+        tray_menu.addAction(hide_action)
+        tray_menu.addAction(show_action)
+        tray_menu.addSeparator()
+        tray_menu.addAction(settings_action)
+        tray_menu.addSeparator()
+        tray_menu.addAction(quit_action)
+        
+        # 设置托盘菜单
+        system_tray.setContextMenu(tray_menu)
+        
+        # 托盘图标双击事件
+        def on_tray_activated(reason):
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+                toggle_pet_visibility()
+        
+        system_tray.activated.connect(on_tray_activated)
+        
+        # 显示托盘图标
+        system_tray.show()
+        
+        # 初始状态：显示宠物，隐藏"显示宠物"菜单项
         pet.show()
+        show_action.setVisible(False)
+        
+        # 设置托盘提示
+        system_tray.setToolTip("桌面宠物 - 双击显示/隐藏宠物")
         
         print("桌面宠物已启动！")
         print("使用说明：")

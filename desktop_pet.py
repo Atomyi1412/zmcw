@@ -627,15 +627,82 @@ class DesktopPet(QWidget):
             script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'main.py'))
             return f'"{python_exe}" "{script_path}"'
 
+    def _macos_app_bundle_path(self):
+        """尝试获取当前应用的 .app 包路径（仅在打包为 .app 时可用）。"""
+        try:
+            exe_path = os.path.abspath(sys.executable)
+            # PyInstaller .app 内的可执行文件路径通常为 .../YourApp.app/Contents/MacOS/YourApp
+            contents_dir = os.path.dirname(exe_path)  # .../Contents/MacOS
+            app_dir = os.path.dirname(contents_dir)   # .../Contents
+            bundle_dir = os.path.dirname(app_dir)     # .../YourApp.app
+            if bundle_dir.endswith('.app') and os.path.isdir(bundle_dir):
+                return bundle_dir
+        except Exception:
+            pass
+        return None
+
+    def _macos_add_login_item(self, app_path: str, hidden: bool = False) -> bool:
+        """使用 AppleScript 将应用添加到系统“登录项”。返回是否成功。"""
+        import subprocess
+        try:
+            # 使用 System Events 创建登录项
+            # 指定 name 有助于后续删除；若系统已存在同名项，先尝试删除再创建
+            name = 'DesktopPet'
+            delete_cmd = f'tell application "System Events" to if exists login item "{name}" then delete login item "{name}"'
+            create_cmd = (
+                'tell application "System Events" to '
+                f'make login item at end with properties {{path:"{app_path}", hidden:{str(hidden).lower()}, name:"{name}"}}'
+            )
+            subprocess.run(['osascript', '-e', delete_cmd], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(['osascript', '-e', create_cmd], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return result.returncode == 0
+        except Exception as e:
+            print(f"添加登录项失败: {e}")
+            return False
+
+    def _macos_remove_login_item(self, name: str = 'DesktopPet') -> None:
+        """使用 AppleScript 从系统“登录项”移除应用（忽略错误）。"""
+        import subprocess
+        try:
+            delete_cmd = f'tell application "System Events" to if exists login item "{name}" then delete login item "{name}"'
+            subprocess.run(['osascript', '-e', delete_cmd], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as e:
+            print(f"移除登录项失败: {e}")
+
     def _macos_set_login_item(self, enabled: bool):
-        """macOS: 使用 LaunchAgents 写入登录项。"""
+        """macOS: 优先使用系统“登录项”（Login Items）；失败时回退到 LaunchAgents。"""
         import plistlib
         import subprocess
+
+        # 统一的 LaunchAgent 路径与标签（作为回退方案以及清理遗留）
         plist_dir = os.path.expanduser('~/Library/LaunchAgents')
         os.makedirs(plist_dir, exist_ok=True)
         label = 'com.desktoppet.app'
         plist_path = os.path.join(plist_dir, f'{label}.plist')
+
         if enabled:
+            # 优先尝试把 .app 写入“登录项”列表
+            app_bundle = self._macos_app_bundle_path()
+            if app_bundle:
+                ok = self._macos_add_login_item(app_bundle, hidden=False)
+                if ok:
+                    # 登录项添加成功：清理可能存在的 LaunchAgent，避免显示在“允许在后台”
+                    try:
+                        subprocess.run(['launchctl', 'unload', plist_path], check=False)
+                    except Exception:
+                        pass
+                    try:
+                        if os.path.exists(plist_path):
+                            os.remove(plist_path)
+                    except Exception as e:
+                        print(f"清理旧 LaunchAgent 失败: {e}")
+                    return
+                else:
+                    print('未能添加到“登录项”，将回退到 LaunchAgent 方案。')
+            else:
+                print('未检测到 .app 包（可能在开发环境运行），将使用 LaunchAgent 方案。')
+
+            # 回退：使用 LaunchAgent 方案（会显示在“允许在后台”）
             if getattr(sys, 'frozen', False):
                 program_args = [sys.executable]
             else:
@@ -645,14 +712,13 @@ class DesktopPet(QWidget):
                 'ProgramArguments': program_args,
                 'RunAtLoad': True,
                 'KeepAlive': False,
-                'ProcessType': 'Background',
+                # 移除 ProcessType: 'Background'，尽量减少被归类为后台项目的概率（仍可能显示在“允许在后台”）
                 'StandardOutPath': '/tmp/desktoppet.out',
                 'StandardErrorPath': '/tmp/desktoppet.err'
             }
             try:
                 with open(plist_path, 'wb') as f:
                     plistlib.dump(plist_data, f)
-                # 先卸载旧的，再加载新的
                 try:
                     subprocess.run(['launchctl', 'unload', plist_path], check=False)
                 except Exception:
@@ -664,7 +730,8 @@ class DesktopPet(QWidget):
             except Exception as e:
                 print(f"写入 LaunchAgent 失败: {e}")
         else:
-            # 关闭：卸载并删除 plist
+            # 关闭：删除登录项，同时卸载并删除 LaunchAgent
+            self._macos_remove_login_item(name='DesktopPet')
             try:
                 try:
                     subprocess.run(['launchctl', 'unload', plist_path], check=False)

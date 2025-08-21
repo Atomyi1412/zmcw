@@ -32,6 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['assets/icon.png'],
 )
 coll = COLLECT(
     exe,
@@ -45,6 +46,15 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='DesktopPet.app',
-    icon=None,
-    bundle_identifier=None,
+    icon='assets/icon.png',
+    bundle_identifier='com.desktoppet.app',
+    info_plist={
+        'LSUIElement': True,
+        'CFBundleName': 'DesktopPet',
+        'CFBundleDisplayName': '桌面宠物',
+        'CFBundleVersion': '1.0.4',
+        'CFBundleShortVersionString': '1.0.4',
+        'NSHighResolutionCapable': True,
+        'NSSupportsAutomaticGraphicsSwitching': True,
+    },
 )
