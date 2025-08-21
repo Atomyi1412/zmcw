@@ -4,6 +4,7 @@
 ;   /DSourceDir=dist\DesktopPet
 ;   /DOutBase=DesktopPet-1.0.0-Windows-Setup
 ;   /DOutputDir=dist\installer
+;   /DIconFile=assets\app.ico
 
 #define MyAppName "DesktopPet"
 #define MyAppPublisher "DesktopPet"
@@ -24,6 +25,10 @@
   #define OutputDir "dist\\installer"
 #endif
 
+#ifdef IconFile
+  #define MyIconFile IconFile
+#endif
+
 [Setup]
 AppId={{7A9C3121-3328-4B72-9B1C-4C6C9D1B4A92}
 AppName={#MyAppName}
@@ -39,6 +44,9 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
+#ifdef MyIconFile
+SetupIconFile={#MyIconFile}
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
