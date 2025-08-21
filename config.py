@@ -48,8 +48,19 @@ class PetConfig:
     
     # 设置功能配置（2.1版本新增）
     ALWAYS_ON_TOP = True          # 默认置顶显示
-    SETTINGS_DIALOG_WIDTH = 350   # 设置对话框宽度
-    SETTINGS_DIALOG_HEIGHT = 250  # 设置对话框高度
+    SETTINGS_DIALOG_WIDTH = 460   # 设置对话框宽度（原为350，放大以容纳更宽的输入框）
+    SETTINGS_DIALOG_HEIGHT = 360  # 设置对话框高度（加大以容纳更舒适的行间距）
+
+    # 个性化配置（新增）
+    DEFAULT_PET_NAME = '小乔治'   # 默认宠物名称
+    
+    # 宠物外观配置（新增）
+    DEFAULT_PET_SCALE = 1.0       # 默认宠物缩放比例（1.0为原始大小）
+    MIN_PET_SCALE = 0.5           # 最小缩放比例
+    MAX_PET_SCALE = 2.0           # 最大缩放比例
+    
+    # 交互行为配置（新增）
+    DEFAULT_AUTO_FALL = True      # 默认启用自动下落功能
     
     # 多提醒管理功能配置（2.2版本新增）
     REMINDER_LIST_DIALOG_WIDTH = 700    # 提醒列表对话框宽度

@@ -78,7 +78,8 @@ class ReminderEditDialog(QDialog):
         self.setWindowFlags(
             Qt.Dialog |
             Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint
+            Qt.WindowCloseButtonHint |
+            Qt.WindowStaysOnTopHint
         )
         
         self.setModal(True)
@@ -505,7 +506,8 @@ class ReminderListDialog(QDialog):
         self.setWindowFlags(
             Qt.Dialog |
             Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint
+            Qt.WindowCloseButtonHint |
+            Qt.WindowStaysOnTopHint
         )
         
         self.setModal(True)

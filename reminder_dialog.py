@@ -25,6 +25,10 @@ class ReminderDialog(QDialog):
         self.confirm_button = None
         self.cancel_button = None
         
+        # 新增：提醒标题
+        self.title_edit = None
+        self._title_user_edited = False
+        
         # 提醒类型相关组件
         self.single_radio = None
         self.repeat_radio = None
@@ -44,202 +48,178 @@ class ReminderDialog(QDialog):
     def init_dialog(self):
         """初始化对话框属性"""
         self.setWindowTitle('设置提醒')
-        self.setFixedSize(480, 420)  # 增加宽度和高度以容纳所有控件
+        # 延后固定尺寸，构建完UI后按内容自适应
         
         # 设置窗口标志：模态对话框
         self.setWindowFlags(
             Qt.Dialog |
             Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint
+            Qt.WindowCloseButtonHint |
+            Qt.WindowStaysOnTopHint
         )
         
         # 设置为模态对话框
         self.setModal(True)
-    
+
     def setup_ui(self):
         """设置界面布局"""
         # 创建主布局
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(20)  # 增加控件间距
-        main_layout.setContentsMargins(25, 25, 25, 25)  # 增加边距
+        main_layout.setSpacing(4)  # 更紧凑的行间距
+        main_layout.setContentsMargins(8, 6, 8, 6)  # 左右8，上下6，进一步减少留白
         
         # 标题标签
         title_label = QLabel('设置提醒')
         title_font = QFont()
-        title_font.setPointSize(14)
+        title_font.setPointSize(15)
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title_label)
+        # main_layout.addWidget(title_label)
         
-        # 提醒类型选择区域
-        type_layout = QVBoxLayout()
-        type_layout.setSpacing(10)
+        # 提醒类型选择区域（单行：标签 + 单选按钮）
+        type_layout = QHBoxLayout()
+        type_layout.setSpacing(6)
         type_title = QLabel('提醒类型:')
         type_title_font = QFont()
-        type_title_font.setPointSize(12)
-        type_title_font.setBold(True)
+        type_title_font.setPointSize(15)
         type_title.setFont(type_title_font)
-        type_layout.addWidget(type_title)
+        type_title.setMinimumWidth(72)
         
         # 创建单选按钮组
         self.reminder_type_group = QButtonGroup()
-        
-        radio_layout = QHBoxLayout()
-        radio_layout.setSpacing(30)  # 增加单选按钮间距
         self.single_radio = QRadioButton('单次提醒')
         self.repeat_radio = QRadioButton('循环提醒')
-        self.single_radio.setChecked(True)  # 默认选择单次提醒
-        
-        # 设置单选按钮字体
-        radio_font = QFont()
-        radio_font.setPointSize(11)
+        self.single_radio.setChecked(True)
+        radio_font = QFont(); radio_font.setPointSize(15)
         self.single_radio.setFont(radio_font)
         self.repeat_radio.setFont(radio_font)
-        
         self.reminder_type_group.addButton(self.single_radio, 0)
         self.reminder_type_group.addButton(self.repeat_radio, 1)
         
-        radio_layout.addWidget(self.single_radio)
-        radio_layout.addWidget(self.repeat_radio)
-        radio_layout.addStretch()  # 添加弹性空间
-        type_layout.addLayout(radio_layout)
+        type_layout.addWidget(type_title)
+        type_layout.addWidget(self.single_radio)
+        type_layout.addWidget(self.repeat_radio)
+        type_layout.addStretch()
         main_layout.addLayout(type_layout)
+        
+        # 新增：提醒标题输入（单行）
+        title_row = QHBoxLayout()
+        title_row.setSpacing(6)
+        title_row_label = QLabel('提醒标题:')
+        trl_font = QFont(); trl_font.setPointSize(15)
+        title_row_label.setFont(trl_font)
+        title_row_label.setMinimumWidth(72)
+        self.title_edit = QLineEdit()
+        te_font = QFont(); te_font.setPointSize(15)
+        self.title_edit.setFont(te_font)
+        self.title_edit.setMinimumHeight(32)
+        self.title_edit.setPlaceholderText('例如：定时提醒 09:30')
+        try:
+            self.title_edit.setMaxLength(PetConfig.MAX_REMINDER_TITLE_LENGTH)
+        except Exception:
+            pass
+        self.title_edit.textEdited.connect(self._on_title_text_edited)
+        title_row.addWidget(title_row_label)
+        title_row.addWidget(self.title_edit)
+        main_layout.addLayout(title_row)
         
         # 时间选择区域（单次提醒）
         self.time_layout = QHBoxLayout()
-        self.time_layout.setSpacing(15)
+        self.time_layout.setSpacing(4)
         time_label = QLabel('提醒时间:')
-        time_label.setMinimumWidth(100)
+        time_label.setMinimumWidth(72)
         time_label_font = QFont()
-        time_label_font.setPointSize(11)
+        time_label_font.setPointSize(15)
         time_label.setFont(time_label_font)
-        
         self.time_edit = QTimeEdit()
         self.time_edit.setDisplayFormat('HH:mm')
-        self.time_edit.setTime(QTime.currentTime().addSecs(300))  # 默认5分钟后
-        self.time_edit.setMinimumHeight(35)  # 设置最小高度
-        self.time_edit.setMinimumWidth(120)  # 设置最小宽度
-        
+        self.time_edit.setTime(QTime.currentTime().addSecs(300))
+        self.time_edit.setMinimumHeight(32)
+        self.time_edit.setMinimumWidth(112)
+        time_edit_font = QFont(); time_edit_font.setPointSize(15)
+        self.time_edit.setFont(time_edit_font)
         self.time_layout.addWidget(time_label)
         self.time_layout.addWidget(self.time_edit)
-        self.time_layout.addStretch()  # 添加弹性空间
+        self.time_layout.addStretch()
         main_layout.addLayout(self.time_layout)
         
         # 循环提醒频率设置区域
         self.interval_layout = QHBoxLayout()
-        self.interval_layout.setSpacing(15)
+        self.interval_layout.setSpacing(4)
         self.interval_label = QLabel('提醒间隔:')
-        self.interval_label.setMinimumWidth(100)
+        self.interval_label.setMinimumWidth(72)
         interval_label_font = QFont()
-        interval_label_font.setPointSize(11)
+        interval_label_font.setPointSize(15)
         self.interval_label.setFont(interval_label_font)
-        
         self.interval_spinbox = QSpinBox()
-        self.interval_spinbox.setMinimum(1)
-        self.interval_spinbox.setMaximum(999)
+        self.interval_spinbox.setRange(1, 999)
         self.interval_spinbox.setValue(1)
-        self.interval_spinbox.setMinimumHeight(35)
-        self.interval_spinbox.setMinimumWidth(80)
-        
+        self.interval_spinbox.setMinimumHeight(32)
+        self.interval_spinbox.setMinimumWidth(72)
+        interval_spin_font = QFont(); interval_spin_font.setPointSize(15)
+        self.interval_spinbox.setFont(interval_spin_font)
         self.interval_unit_combo = QComboBox()
         self.interval_unit_combo.addItems(['分钟', '小时'])
-        self.interval_unit_combo.setMinimumHeight(35)
-        self.interval_unit_combo.setMinimumWidth(80)
-        
+        self.interval_unit_combo.setMinimumHeight(32)
+        self.interval_unit_combo.setMinimumWidth(72)
+        interval_unit_font = QFont(); interval_unit_font.setPointSize(15)
+        self.interval_unit_combo.setFont(interval_unit_font)
         self.interval_layout.addWidget(self.interval_label)
         self.interval_layout.addWidget(self.interval_spinbox)
         self.interval_layout.addWidget(self.interval_unit_combo)
-        self.interval_layout.addStretch()  # 添加弹性空间
+        self.interval_layout.addStretch()
         main_layout.addLayout(self.interval_layout)
         
         # 初始状态：隐藏循环提醒设置
         self.toggle_interval_controls(False)
         
-        # 内容输入区域
-        content_layout = QVBoxLayout()
-        content_layout.setSpacing(10)
+        # 内容输入区域 -> 横向单行：标签 + 输入框
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(6)
         content_label = QLabel('提醒内容:')
         content_label_font = QFont()
-        content_label_font.setPointSize(11)
-        content_label_font.setBold(True)
+        content_label_font.setPointSize(15)
         content_label.setFont(content_label_font)
-        
+        content_label.setMinimumWidth(72)
         self.content_edit = QLineEdit()
         self.content_edit.setPlaceholderText('请输入提醒内容...')
-        self.content_edit.setText('该休息一下了！')
-        self.content_edit.setMinimumHeight(40)  # 增加输入框高度
-        content_edit_font = QFont()
-        content_edit_font.setPointSize(11)
-        self.content_edit.setFont(content_edit_font)
-        
+        content_font = QFont(); content_font.setPointSize(15)
+        self.content_edit.setFont(content_font)
+        self.content_edit.setMinimumHeight(32)
         content_layout.addWidget(content_label)
         content_layout.addWidget(self.content_edit)
         main_layout.addLayout(content_layout)
         
-        # 按钮区域
+        # 确认和取消按钮区域
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(20)
-        button_layout.addStretch()  # 左侧弹性空间
-        
+        button_layout.setSpacing(8)
+        button_layout.addStretch()
         self.cancel_button = QPushButton('取消')
+        self.cancel_button.setMinimumSize(86, 32)
+        self.confirm_button = QPushButton('确定')
+        self.confirm_button.setMinimumSize(86, 32)
+        
+        # 新增：连接按钮信号
         self.cancel_button.clicked.connect(self.safe_reject)
-        self.cancel_button.setMinimumSize(100, 40)  # 设置按钮尺寸
-        cancel_button_font = QFont()
-        cancel_button_font.setPointSize(11)
-        self.cancel_button.setFont(cancel_button_font)
-        
-        self.confirm_button = QPushButton('确认')
         self.confirm_button.clicked.connect(self.accept_reminder)
-        self.confirm_button.setDefault(True)  # 设为默认按钮
-        self.confirm_button.setMinimumSize(100, 40)  # 设置按钮尺寸
-        confirm_button_font = QFont()
-        confirm_button_font.setPointSize(11)
-        self.confirm_button.setFont(confirm_button_font)
-        
-        # 设置按钮样式
-        self.cancel_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
-        
-        self.confirm_button.setStyleSheet("""
-            QPushButton {
-                background-color: #007acc;
-                color: white;
-                border: 1px solid #005a9e;
-                border-radius: 5px;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-            QPushButton:pressed {
-                background-color: #004a7e;
-            }
-        """)
+        self.confirm_button.setDefault(True)
         
         button_layout.addWidget(self.cancel_button)
         button_layout.addWidget(self.confirm_button)
-        button_layout.addStretch()  # 右侧弹性空间
         main_layout.addLayout(button_layout)
         
-        # 设置主布局
-        self.setLayout(main_layout)
-        
-        # 连接信号
+        # 连接信号：用于自动维护默认标题
         self.single_radio.toggled.connect(self.on_reminder_type_changed)
         self.repeat_radio.toggled.connect(self.on_reminder_type_changed)
+        self.time_edit.timeChanged.connect(self.on_title_deps_changed)
+        self.interval_spinbox.valueChanged.connect(self.on_title_deps_changed)
+        self.interval_unit_combo.currentTextChanged.connect(self.on_title_deps_changed)
+        
+        self.setLayout(main_layout)
+        
+        # 构建完成后，根据当前设置生成默认标题
+        self.on_title_deps_changed()
     
     def get_reminder_time(self):
         """获取用户设置的提醒时间"""
@@ -248,6 +228,11 @@ class ReminderDialog(QDialog):
     def get_reminder_content(self):
         """获取用户输入的提醒内容"""
         return self.content_edit.text().strip()
+    
+    def get_reminder_title(self):
+        """获取提醒标题（若为空则给出默认值）"""
+        title = (self.title_edit.text().strip() if self.title_edit else '').strip()
+        return title or self.generate_default_title()
     
     def get_reminder_type(self):
         """获取提醒类型"""
@@ -278,6 +263,31 @@ class ReminderDialog(QDialog):
         time_label = self.time_layout.itemAt(0).widget()
         time_label.setVisible(not is_repeat)
         self.time_edit.setVisible(not is_repeat)
+        
+        # 类型切换后更新默认标题（若用户尚未手动编辑）
+        self.on_title_deps_changed()
+    
+    def _on_title_text_edited(self, _):
+        """用户手动编辑标题后，锁定默认同步逻辑"""
+        self._title_user_edited = True
+    
+    def on_title_deps_changed(self, *args):
+        """当时间、间隔或类型变化时，如果用户未手动编辑，则同步默认标题"""
+        if not self._title_user_edited and self.title_edit is not None:
+            self.title_edit.setText(self.generate_default_title())
+    
+    def generate_default_title(self) -> str:
+        """根据当前设置生成默认标题"""
+        if self.single_radio and self.single_radio.isChecked():
+            t = self.time_edit.time() if self.time_edit else QTime.currentTime()
+            return f"定时提醒 {t.toString('HH:mm')}"
+        # 循环提醒
+        val = self.interval_spinbox.value() if self.interval_spinbox else 1
+        unit = self.interval_unit_combo.currentText() if self.interval_unit_combo else '分钟'
+        if unit == '小时':
+            return f"循环提醒 每{val}小时"
+        else:
+            return f"循环提醒 每{val}分钟"
     
     def accept_reminder(self):
         """确认按钮处理"""
