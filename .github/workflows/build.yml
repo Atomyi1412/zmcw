@@ -107,8 +107,10 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Building with PyInstaller..."
-          $iconArg = if (Test-Path "assets\app.ico") { "--icon assets\app.ico" } else { "" }
-          python -m PyInstaller --noconfirm --name DesktopPet --windowed --add-data="assets;assets" $iconArg main.py
+          $pyArgs = @("--noconfirm", "--name", "DesktopPet", "--windowed", "--add-data=assets;assets")
+          if (Test-Path "assets\app.ico") { $pyArgs += @("--icon", "assets\app.ico") }
+          $pyArgs += "main.py"
+          python -m PyInstaller @pyArgs
           
           if (Test-Path "dist\DesktopPet") {
             Write-Host "✓ PyInstaller build successful"
