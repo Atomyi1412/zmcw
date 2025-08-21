@@ -71,6 +71,58 @@ def main():
         # 防止应用在最后一个窗口关闭时退出（适用于托盘应用）
         app.setQuitOnLastWindowClosed(False)
         
+        # Windows特定：隐藏任务栏图标
+        if os.name == 'nt':  # Windows系统
+            try:
+                import ctypes
+                from ctypes import wintypes
+                
+                # 获取当前进程ID
+                pid = os.getpid()
+                
+                # 定义Windows API函数
+                user32 = ctypes.windll.user32
+                kernel32 = ctypes.windll.kernel32
+                
+                # 枚举窗口回调函数
+                def enum_windows_proc(hwnd, lParam):
+                    # 获取窗口进程ID
+                    window_pid = wintypes.DWORD()
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
+                    
+                    # 如果是当前进程的窗口
+                    if window_pid.value == pid:
+                        # 获取窗口类名
+                        class_name = ctypes.create_unicode_buffer(256)
+                        user32.GetClassNameW(hwnd, class_name, 256)
+                        
+                        # 如果是Qt应用程序窗口，隐藏任务栏图标
+                        if 'Qt' in class_name.value:
+                            # 获取扩展窗口样式
+                            ex_style = user32.GetWindowLongW(hwnd, -20)  # GWL_EXSTYLE
+                            # 添加WS_EX_TOOLWINDOW样式来隐藏任务栏图标
+                            ex_style |= 0x80  # WS_EX_TOOLWINDOW
+                            user32.SetWindowLongW(hwnd, -20, ex_style)
+                    
+                    return True
+                
+                # 定义回调函数类型
+                EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+                
+                # 延迟执行，确保窗口已创建
+                from PyQt5.QtCore import QTimer
+                def hide_taskbar_icon():
+                    try:
+                        user32.EnumWindows(EnumWindowsProc(enum_windows_proc), 0)
+                    except Exception as e:
+                        print(f"隐藏任务栏图标时出错: {e}")
+                
+                # 延迟500ms执行
+                QTimer.singleShot(500, hide_taskbar_icon)
+                
+            except Exception as e:
+                print(f"Windows任务栏隐藏功能初始化失败: {e}")
+        
         # 检查系统托盘支持
         if not QSystemTrayIcon.isSystemTrayAvailable():
             QMessageBox.critical(None, "系统托盘", "系统不支持系统托盘功能")
