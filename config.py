@@ -61,6 +61,7 @@ class PetConfig:
     
     # 交互行为配置（新增）
     DEFAULT_AUTO_FALL = True      # 默认启用自动下落功能
+    DEFAULT_AUTO_START = False    # 默认不开机自启动
     
     # 多提醒管理功能配置（2.2版本新增）
     REMINDER_LIST_DIALOG_WIDTH = 700    # 提醒列表对话框宽度

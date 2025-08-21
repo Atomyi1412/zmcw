@@ -68,6 +68,11 @@ class SettingsDialog(QDialog):
         self.always_on_top_checkbox.setToolTip("勾选后，桌面宠物将始终显示在其他程序窗口之上")
         display_layout.addWidget(self.always_on_top_checkbox)
         
+        # 开机自启动
+        self.auto_start_checkbox = QCheckBox("开机自启动")
+        self.auto_start_checkbox.setToolTip("勾选后，系统登录时自动启动桌面宠物")
+        display_layout.addWidget(self.auto_start_checkbox)
+        
         # 自动下落选项
         self.auto_fall_checkbox = QCheckBox("自动下落（松手后从上半区下落）")
         self.auto_fall_checkbox.setToolTip("关闭后，松手将不触发自动下落动画")
@@ -180,6 +185,10 @@ class SettingsDialog(QDialog):
         always_on_top = self.current_settings.get('always_on_top', PetConfig.ALWAYS_ON_TOP)
         self.always_on_top_checkbox.setChecked(always_on_top)
     
+        # 开机自启动
+        auto_start = bool(self.current_settings.get('auto_start', PetConfig.DEFAULT_AUTO_START))
+        self.auto_start_checkbox.setChecked(auto_start)
+    
         pet_name = self.current_settings.get('pet_name', PetConfig.DEFAULT_PET_NAME)
         self.pet_name_edit.setText(str(pet_name))
     
@@ -216,6 +225,7 @@ class SettingsDialog(QDialog):
         pet_scale = max(PetConfig.MIN_PET_SCALE, min(PetConfig.MAX_PET_SCALE, self.pet_scale_slider.value() / 100.0))
         return {
             'always_on_top': self.always_on_top_checkbox.isChecked(),
+            'auto_start': self.auto_start_checkbox.isChecked(),
             'pet_name': name,
             'pet_scale': pet_scale,
             'auto_fall': self.auto_fall_checkbox.isChecked()

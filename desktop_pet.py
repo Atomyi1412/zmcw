@@ -189,6 +189,12 @@ class DesktopPet(QWidget):
         if always_on_top:
             self.toggle_always_on_top(True)
         
+        # 同步一次开机自启动状态（保证路径为当前版本/位置）
+        try:
+            self.update_auto_start(bool(self.current_settings.get('auto_start', getattr(PetConfig, 'DEFAULT_AUTO_START', False))))
+        except Exception as e:
+            print(f"同步开机自启动失败: {e}")
+        
         # 加载图像
         self.load_images()
         
@@ -471,6 +477,13 @@ class DesktopPet(QWidget):
             except Exception as e:
                 print(f"应用缩放失败: {e}")
         
+        # 应用/同步开机自启动
+        if 'auto_start' in new_settings:
+            try:
+                self.update_auto_start(bool(new_settings['auto_start']))
+            except Exception as e:
+                print(f"应用开机自启动失败: {e}")
+        
         # 保存设置到文件
         self.save_settings()
     
@@ -541,24 +554,127 @@ class DesktopPet(QWidget):
                     self.current_settings['pet_scale'] = getattr(PetConfig, 'DEFAULT_PET_SCALE', 1.0)
                 if 'auto_fall' not in self.current_settings:
                     self.current_settings['auto_fall'] = getattr(PetConfig, 'DEFAULT_AUTO_FALL', True)
+                # 兼容旧版本：新增开机自启动
+                if 'auto_start' not in self.current_settings:
+                    self.current_settings['auto_start'] = getattr(PetConfig, 'DEFAULT_AUTO_START', False)
             else:
-                # 使用默认设置（含宠物名称、缩放与自动下落）
+                # 使用默认设置（含宠物名称、缩放、自动下落与开机自启动）
                 self.current_settings = {
                     'always_on_top': PetConfig.ALWAYS_ON_TOP,
                     'pet_name': PetConfig.DEFAULT_PET_NAME,
                     'pet_scale': getattr(PetConfig, 'DEFAULT_PET_SCALE', 1.0),
-                    'auto_fall': getattr(PetConfig, 'DEFAULT_AUTO_FALL', True)
+                    'auto_fall': getattr(PetConfig, 'DEFAULT_AUTO_FALL', True),
+                    'auto_start': getattr(PetConfig, 'DEFAULT_AUTO_START', False)
                 }
         except Exception as e:
             print(f"加载设置失败: {e}")
-            # 使用默认设置（含宠物名称、缩放与自动下落）
+            # 使用默认设置（含宠物名称、缩放、自动下落与开机自启动）
             self.current_settings = {
                 'always_on_top': PetConfig.ALWAYS_ON_TOP,
                 'pet_name': PetConfig.DEFAULT_PET_NAME,
                 'pet_scale': getattr(PetConfig, 'DEFAULT_PET_SCALE', 1.0),
-                'auto_fall': getattr(PetConfig, 'DEFAULT_AUTO_FALL', True)
+                'auto_fall': getattr(PetConfig, 'DEFAULT_AUTO_FALL', True),
+                'auto_start': getattr(PetConfig, 'DEFAULT_AUTO_START', False)
             }
-    
+
+    # =====================
+    # 自启动（开机启动）实现
+    # =====================
+    def update_auto_start(self, enabled: bool):
+        """根据平台启用/禁用开机自启动。"""
+        try:
+            if sys.platform.startswith('darwin'):
+                self._macos_set_login_item(enabled)
+            elif os.name == 'nt':
+                self._windows_set_run_key(enabled)
+            else:
+                # 其他平台暂不实现（或按需扩展）
+                pass
+            self.current_settings['auto_start'] = bool(enabled)
+        except Exception as e:
+            print(f"更新开机自启动失败: {e}")
+
+    def _windows_set_run_key(self, enabled: bool):
+        """Windows: 使用注册表 Run 键实现开机自启动（HKCU）。"""
+        try:
+            import winreg
+        except Exception as e:
+            print(f"winreg 不可用，无法设置开机自启动: {e}")
+            return
+        run_key_path = r"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+        app_name = "DesktopPet"
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key_path, 0, winreg.KEY_SET_VALUE) as key:
+                if enabled:
+                    cmd = self._windows_start_command()
+                    winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, cmd)
+                else:
+                    try:
+                        winreg.DeleteValue(key, app_name)
+                    except FileNotFoundError:
+                        pass
+        except Exception as e:
+            print(f"设置 Windows 自启动失败: {e}")
+
+    def _windows_start_command(self) -> str:
+        """返回写入 Run 键的启动命令（带引号）。"""
+        if getattr(sys, 'frozen', False):
+            # PyInstaller 打包的 exe
+            return f'"{sys.executable}"'
+        else:
+            # 开发环境：使用当前 Python 解释器 + main.py
+            python_exe = sys.executable
+            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'main.py'))
+            return f'"{python_exe}" "{script_path}"'
+
+    def _macos_set_login_item(self, enabled: bool):
+        """macOS: 使用 LaunchAgents 写入登录项。"""
+        import plistlib
+        import subprocess
+        plist_dir = os.path.expanduser('~/Library/LaunchAgents')
+        os.makedirs(plist_dir, exist_ok=True)
+        label = 'com.desktoppet.app'
+        plist_path = os.path.join(plist_dir, f'{label}.plist')
+        if enabled:
+            if getattr(sys, 'frozen', False):
+                program_args = [sys.executable]
+            else:
+                program_args = [sys.executable, os.path.abspath(os.path.join(os.path.dirname(__file__), 'main.py'))]
+            plist_data = {
+                'Label': label,
+                'ProgramArguments': program_args,
+                'RunAtLoad': True,
+                'KeepAlive': False,
+                'ProcessType': 'Background',
+                'StandardOutPath': '/tmp/desktoppet.out',
+                'StandardErrorPath': '/tmp/desktoppet.err'
+            }
+            try:
+                with open(plist_path, 'wb') as f:
+                    plistlib.dump(plist_data, f)
+                # 先卸载旧的，再加载新的
+                try:
+                    subprocess.run(['launchctl', 'unload', plist_path], check=False)
+                except Exception:
+                    pass
+                try:
+                    subprocess.run(['launchctl', 'load', plist_path], check=False)
+                except Exception as e:
+                    print(f"加载 LaunchAgent 失败: {e}")
+            except Exception as e:
+                print(f"写入 LaunchAgent 失败: {e}")
+        else:
+            # 关闭：卸载并删除 plist
+            try:
+                try:
+                    subprocess.run(['launchctl', 'unload', plist_path], check=False)
+                except Exception:
+                    pass
+                if os.path.exists(plist_path):
+                    os.remove(plist_path)
+            except Exception as e:
+                print(f"移除 LaunchAgent 失败: {e}")
+
     def show_reminder_dialog(self):
         """显示提醒设置对话框"""
         dialog = None
