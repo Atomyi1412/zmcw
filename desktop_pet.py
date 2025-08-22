@@ -9,10 +9,12 @@ import os
 import math
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QApplication, QMenu, QAction, QMessageBox, QDialog,
-    QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy
+    QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, QDesktopWidget
 )
 from PyQt5.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer, QTime, QStandardPaths, QRectF, QPointF
-from PyQt5.QtGui import QPixmap, QPainter, QColor, QPainterPath, QFont
+from PyQt5.QtGui import QPixmap, QPainter, QColor, QPainterPath, QFont, QCursor, QPen
+from PyQt5.QtCore import Qt as QtCore
+from PyQt5.QtGui import QPen as QtPen
 
 from pet_state import PetState
 from config import PetConfig
@@ -53,16 +55,7 @@ class SpeechBubbleDialog(QDialog):
         layout.setContentsMargins(18, 16, 18, 22)  # 底部增加边距为尾巴留空间
         layout.setSpacing(10)
 
-        title_label = QLabel(f"{self.title}")
-        title_font = QFont()
-        title_font.setPointSize(16)  # 再增大标题
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #333;")
-        # 允许标题在宽度不足时换行
-        title_label.setWordWrap(True)
-        title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        title_label.setMaximumWidth(self.max_width - 36)  # 36=左右边距18*2
+        # 移除标题显示
 
         content_label = QLabel(self.content)
         content_label.setWordWrap(True)
@@ -88,7 +81,7 @@ class SpeechBubbleDialog(QDialog):
         )
         btn.clicked.connect(self.accept)
 
-        layout.addWidget(title_label)
+        # 不再添加标题标签
         layout.addWidget(content_label, 1)
         hl = QHBoxLayout()
         hl.addStretch()
@@ -103,7 +96,7 @@ class SpeechBubbleDialog(QDialog):
         if self.width() < self.min_width:
             self.resize(self.min_width, self.height())
 
-    def paintEvent(self, event):
+    def paintEvent(self, a0):
         # 画气泡+小尾巴（现在在底部中央，指向宠物头顶）
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -137,8 +130,12 @@ class SpeechBubbleDialog(QDialog):
         painter.fillPath(bubble_path, QColor(255, 255, 255))
         painter.fillPath(tail, QColor(255, 255, 255))
 
-        # 轮廓线
-        painter.setPen(QColor(225, 225, 225))
+        # 粗黑边框
+        from PyQt5.QtGui import QPen
+        from PyQt5.QtCore import Qt as QtCore
+        pen = QPen(QColor(0, 0, 0), 3)  # 黑色，3像素粗
+        pen.setJoinStyle(QtCore.RoundJoin)  # 圆角连接
+        painter.setPen(pen)
         painter.drawRoundedRect(bubble_rect2, self.radius, self.radius)
         painter.drawPath(tail)
 
@@ -344,24 +341,24 @@ class DesktopPet(QWidget):
         else:
             print(f"警告：状态 {state_key} 对应的图像不存在")
     
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, a0):
         """鼠标按下事件"""
-        if event.button() == Qt.LeftButton:
+        if a0.button() == Qt.LeftButton:
             # 若正在执行下落动画，立即停止
             if hasattr(self, 'leaf_fall_timer') and self.leaf_fall_timer and self.leaf_fall_timer.isActive():
                 self.leaf_fall_timer.stop()
                 self.leaf_fall_timer = None
                 self.change_pet_state(PetState.NORMAL)
             self.is_dragging = True
-            self.drag_start_position = event.globalPos() - self.frameGeometry().topLeft()
+            self.drag_start_position = a0.globalPos() - self.frameGeometry().topLeft()
             self.change_pet_state(PetState.DRAGGING)
-            event.accept()
+            a0.accept()
     
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, a0):
         """鼠标移动事件"""
-        if event.buttons() == Qt.LeftButton and self.is_dragging:
+        if a0.buttons() == Qt.LeftButton and self.is_dragging:
             # 计算新位置
-            new_position = event.globalPos() - self.drag_start_position
+            new_position = a0.globalPos() - self.drag_start_position
             
             # 使用可用工作区，避免进入 Dock/任务栏
             rect = self._available_rect()
@@ -369,11 +366,11 @@ class DesktopPet(QWidget):
             new_y = max(rect.top(), min(new_position.y(), rect.bottom() - self.height()))
             
             self.move(new_x, new_y)
-            event.accept()
+            a0.accept()
     
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, a0):
         """鼠标释放事件"""
-        if event.button() == Qt.LeftButton and self.is_dragging:
+        if a0.button() == Qt.LeftButton and self.is_dragging:
             self.is_dragging = False
             
             # 检查是否在屏幕上半部分（基于可用工作区）
@@ -389,9 +386,9 @@ class DesktopPet(QWidget):
                 # 在下半部分或关闭自动下落时，直接回到正常状态
                 self.change_pet_state(PetState.NORMAL)
             
-            event.accept()
+            a0.accept()
     
-    def contextMenuEvent(self, event):
+    def contextMenuEvent(self, a0):
         """右键菜单事件"""
         # 创建右键菜单
         context_menu = QMenu(self)
@@ -428,11 +425,11 @@ class DesktopPet(QWidget):
         
         # 添加退出选项
         exit_action = QAction('退出', self)
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(QApplication.quit)
         context_menu.addAction(exit_action)
         
         # 显示菜单
-        context_menu.exec_(event.globalPos())
+        context_menu.exec_(a0.globalPos())
     
     def show_settings_dialog(self):
         """显示设置对话框"""
@@ -767,13 +764,15 @@ class DesktopPet(QWidget):
             if result == QDialog.Accepted:
                 reminder_type = dialog.get_reminder_type()
                 reminder_content = dialog.get_reminder_content()
-                reminder_title = dialog.get_reminder_title()
                 if reminder_type == 'single':
                     reminder_time = dialog.get_reminder_time()
-                    self.add_single_reminder(reminder_time, reminder_content, title=reminder_title)
-                else:
+                    self.add_single_reminder(reminder_time, reminder_content)
+                elif reminder_type == 'repeat':
                     reminder_interval = dialog.get_reminder_interval()
-                    self.add_repeat_reminder(reminder_interval, reminder_content, title=reminder_title)
+                    self.add_repeat_reminder(reminder_interval, reminder_content)
+                elif reminder_type == 'relative':
+                    relative_seconds = dialog.get_relative_seconds()
+                    self.add_relative_reminder(relative_seconds, reminder_content)
         except Exception as e:
             print(f"show_reminder_dialog error: {e}") 
         finally:
@@ -832,11 +831,8 @@ class DesktopPet(QWidget):
         target_time = datetime.combine(today, reminder_time.toPyTime())
         if target_time <= datetime.now():
             target_time += timedelta(days=1)
-        # 使用传入标题或生成默认标题
-        if not title:
-            title = f"定时提醒 {reminder_time.toString('HH:mm')}"
         reminder_id = self.reminder_manager.add_reminder(
-            title=title,
+            title='',
             content=content,
             reminder_type='single',
             target_time=target_time
@@ -851,19 +847,8 @@ class DesktopPet(QWidget):
         """添加循环提醒"""
         if not self.reminder_manager:
             return
-        # 使用传入标题或生成默认标题
-        if not title:
-            if interval_minutes < 60:
-                title = f"循环提醒 每{interval_minutes}分钟"
-            else:
-                hours = interval_minutes // 60
-                minutes = interval_minutes % 60
-                if minutes == 0:
-                    title = f"循环提醒 每{hours}小时"
-                else:
-                    title = f"循环提醒 每{hours}小时{minutes}分钟"
         reminder_id = self.reminder_manager.add_reminder(
-            title=title,
+            title='',
             content=content,
             reminder_type='repeat',
             interval_minutes=interval_minutes
@@ -875,15 +860,60 @@ class DesktopPet(QWidget):
             f'循环提醒已设置！\n间隔：{interval_text}\n内容：{content}'
         )
     
+    def add_relative_reminder(self, relative_seconds, content, title=None):
+        """添加相对时间提醒"""
+        if not self.reminder_manager:
+            return
+        
+        reminder_id = self.reminder_manager.add_reminder(
+            title='',
+            content=content,
+            reminder_type='relative',
+            relative_seconds=relative_seconds
+        )
+        
+        # 生成时间文本用于显示
+        if relative_seconds < 60:
+            time_text = f"{relative_seconds}秒"
+        elif relative_seconds < 3600:
+            minutes = relative_seconds // 60
+            seconds = relative_seconds % 60
+            if seconds == 0:
+                time_text = f"{minutes}分钟"
+            else:
+                time_text = f"{minutes}分{seconds}秒"
+        else:
+            hours = relative_seconds // 3600
+            minutes = (relative_seconds % 3600) // 60
+            if minutes == 0:
+                time_text = f"{hours}小时"
+            else:
+                time_text = f"{hours}小时{minutes}分钟"
+        
+        QMessageBox.information(
+            self, 
+            '延迟提醒设置成功', 
+            f'延迟提醒已设置！\n延迟：{time_text}后\n内容：{content}'
+        )
+    
+    def add_reminder_by_type(self, content, time, reminder_type, interval, relative_seconds):
+        """根据类型添加提醒"""
+        if reminder_type == 'single':
+            self.add_single_reminder(time, content)
+        elif reminder_type == 'repeat':
+            self.add_repeat_reminder(interval, content)
+        elif reminder_type == 'relative':
+            self.add_relative_reminder(relative_seconds, content)
+    
     def on_reminder_triggered(self, reminder_id, title, content):
         """处理提醒触发事件 -- 使用漫画气泡样式，从宠物正上方展示"""
         try:
-            # 读取宠物名称并拼接到内容前
+            # 读取宠物名称并拼接到内容前，换行显示类似写信格式
             pet_name = self.current_settings.get('pet_name', PetConfig.DEFAULT_PET_NAME)
-            display_content = f"{pet_name}：{content}" if pet_name else content
+            display_content = f"{pet_name}：\n    {content}" if pet_name else content
             
             # 创建漫画气泡对话框
-            bubble = SpeechBubbleDialog(f"⏰ {title}", display_content, self)
+            bubble = SpeechBubbleDialog("", display_content, self)
 
             # 计算展示位置（宠物正上方）
             pet_pos = self.pos()
@@ -995,7 +1025,7 @@ class DesktopPet(QWidget):
         self.leaf_fall_timer.timeout.connect(update_position)
         self.leaf_fall_timer.start()
     
-    def closeEvent(self, event):
+    def closeEvent(self, a0):
         """窗口关闭事件"""
         # 停止动画
         if self.fall_animation:
@@ -1010,7 +1040,7 @@ class DesktopPet(QWidget):
         if self.reminder_manager:
             self.reminder_manager.stop_all_reminders()
         
-        event.accept()
+        a0.accept()
 
     def apply_scale(self, scale: float):
         """根据缩放比例调整窗口大小并重建缩放图像"""

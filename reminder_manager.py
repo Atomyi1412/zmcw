@@ -16,13 +16,14 @@ class Reminder:
     """单个提醒类"""
     
     def __init__(self, reminder_id=None, title="", content="", reminder_type="single", 
-                 target_time=None, interval_minutes=None, is_active=True):
+                 target_time=None, interval_minutes=None, relative_seconds=None, is_active=True):
         self.id = reminder_id or str(uuid.uuid4())
         self.title = title
         self.content = content
-        self.type = reminder_type  # 'single' 或 'repeat'
+        self.type = reminder_type  # 'single', 'repeat', 或 'relative'
         self.target_time = target_time  # datetime对象，用于单次提醒
         self.interval_minutes = interval_minutes  # 循环提醒间隔（分钟）
+        self.relative_seconds = relative_seconds  # 相对时间提醒延迟（秒）
         self.is_active = is_active
         self.created_time = datetime.now()
         self.last_triggered = None
@@ -36,6 +37,7 @@ class Reminder:
             'type': self.type,
             'target_time': self.target_time.isoformat() if self.target_time else None,
             'interval_minutes': self.interval_minutes,
+            'relative_seconds': self.relative_seconds,
             'is_active': self.is_active,
             'created_time': self.created_time.isoformat(),
             'last_triggered': self.last_triggered.isoformat() if self.last_triggered else None
@@ -50,6 +52,7 @@ class Reminder:
             content=data['content'],
             reminder_type=data['type'],
             interval_minutes=data.get('interval_minutes'),
+            relative_seconds=data.get('relative_seconds'),
             is_active=data['is_active']
         )
         
@@ -67,23 +70,8 @@ class Reminder:
         if not self.is_active:
             return "已停用"
         
-        if self.type == 'single':
-            if self.target_time:
-                if datetime.now() > self.target_time:
-                    return "已过期"
-                else:
-                    return f"定时提醒：{self.target_time.strftime('%H:%M')}"
-            return "单次提醒"
-        else:
-            if self.interval_minutes < 60:
-                return f"循环提醒：每{self.interval_minutes}分钟"
-            else:
-                hours = self.interval_minutes // 60
-                minutes = self.interval_minutes % 60
-                if minutes == 0:
-                    return f"循环提醒：每{hours}小时"
-                else:
-                    return f"循环提醒：每{hours}小时{minutes}分钟"
+        # 如果是启用状态，直接返回"已启用"
+        return "已启用"
 
 
 class ReminderManager(QObject):
@@ -110,14 +98,15 @@ class ReminderManager(QObject):
         # 启动所有活动的提醒
         self.start_all_active_reminders()
     
-    def add_reminder(self, title, content, reminder_type, target_time=None, interval_minutes=None):
+    def add_reminder(self, title, content, reminder_type, target_time=None, interval_minutes=None, relative_seconds=None):
         """添加新提醒"""
         reminder = Reminder(
             title=title,
             content=content,
             reminder_type=reminder_type,
             target_time=target_time,
-            interval_minutes=interval_minutes
+            interval_minutes=interval_minutes,
+            relative_seconds=relative_seconds
         )
         
         self.reminders[reminder.id] = reminder
@@ -141,7 +130,7 @@ class ReminderManager(QObject):
         return False
     
     def update_reminder(self, reminder_id, title=None, content=None, 
-                       reminder_type=None, target_time=None, interval_minutes=None, is_active=None):
+                       reminder_type=None, target_time=None, interval_minutes=None, relative_seconds=None, is_active=None):
         """更新提醒"""
         if reminder_id not in self.reminders:
             return False
@@ -159,6 +148,8 @@ class ReminderManager(QObject):
             reminder.target_time = target_time
         if interval_minutes is not None:
             reminder.interval_minutes = interval_minutes
+        if relative_seconds is not None:
+            reminder.relative_seconds = relative_seconds
         if is_active is not None:
             reminder.is_active = is_active
         
@@ -197,8 +188,10 @@ class ReminderManager(QObject):
         
         if reminder.type == 'single':
             self._start_single_reminder(reminder)
-        else:
+        elif reminder.type == 'repeat':
             self._start_repeat_reminder(reminder)
+        elif reminder.type == 'relative':
+            self._start_relative_reminder(reminder)
         
         return True
     
@@ -236,6 +229,19 @@ class ReminderManager(QObject):
         
         self.timers[reminder.id] = timer
     
+    def _start_relative_reminder(self, reminder):
+        """启动相对时间提醒"""
+        if not reminder.relative_seconds or reminder.relative_seconds <= 0:
+            return
+        
+        # 创建定时器
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self._trigger_reminder(reminder))
+        timer.start(reminder.relative_seconds * 1000)  # 转换为毫秒
+        
+        self.timers[reminder.id] = timer
+    
     def _trigger_reminder(self, reminder):
         """触发提醒"""
         reminder.last_triggered = datetime.now()
@@ -244,8 +250,8 @@ class ReminderManager(QObject):
         # 发送信号
         self.reminder_triggered.emit(reminder.id, reminder.title, reminder.content)
         
-        # 如果是单次提醒，设置为非活动状态
-        if reminder.type == 'single':
+        # 如果是单次提醒或相对时间提醒，设置为非活动状态
+        if reminder.type in ['single', 'relative']:
             reminder.is_active = False
             self.stop_reminder(reminder.id)
             self.save_reminders()

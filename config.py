@@ -38,7 +38,7 @@ class PetConfig:
     REMINDER_DIALOG_WIDTH = 300   # 提醒对话框宽度
     REMINDER_DIALOG_HEIGHT = 200  # 提醒对话框高度
     REMINDER_MESSAGE_DURATION = 5000  # 提醒消息显示时长（毫秒）
-    PET_REMINDER_OFFSET = 50      # 宠物相对提醒窗口的偏移距离
+    PET_REMINDER_OFFSET = 50      # 宠物延迟提醒窗口的偏移距离
     
     # 循环提醒功能配置（2.1版本新增）
     DEFAULT_REPEAT_INTERVAL = 60  # 默认循环提醒间隔（分钟）

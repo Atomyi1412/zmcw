@@ -9,12 +9,15 @@ from PyQt5.QtWidgets import (
     QTimeEdit, QLineEdit, QPushButton, QMessageBox,
     QRadioButton, QButtonGroup, QSpinBox, QComboBox
 )
-from PyQt5.QtCore import QTime, Qt
+from PyQt5.QtCore import QTime, pyqtSignal, Qt
 from PyQt5.QtGui import QFont
 from config import PetConfig
 
 class ReminderDialog(QDialog):
     """提醒设置对话框类"""
+    
+    # 定义信号
+    reminder_added = pyqtSignal(str, QTime, str, int, int)  # 内容, 时间, 类型, 间隔, 相对秒数
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -25,9 +28,7 @@ class ReminderDialog(QDialog):
         self.confirm_button = None
         self.cancel_button = None
         
-        # 新增：提醒标题
-        self.title_edit = None
-        self._title_user_edited = False
+        # 移除标题相关变量
         
         # 提醒类型相关组件
         self.single_radio = None
@@ -90,39 +91,24 @@ class ReminderDialog(QDialog):
         self.reminder_type_group = QButtonGroup()
         self.single_radio = QRadioButton('单次提醒')
         self.repeat_radio = QRadioButton('循环提醒')
+        self.relative_radio = QRadioButton('延迟提醒')
         self.single_radio.setChecked(True)
         radio_font = QFont(); radio_font.setPointSize(15)
         self.single_radio.setFont(radio_font)
         self.repeat_radio.setFont(radio_font)
+        self.relative_radio.setFont(radio_font)
         self.reminder_type_group.addButton(self.single_radio, 0)
         self.reminder_type_group.addButton(self.repeat_radio, 1)
+        self.reminder_type_group.addButton(self.relative_radio, 2)
         
         type_layout.addWidget(type_title)
         type_layout.addWidget(self.single_radio)
         type_layout.addWidget(self.repeat_radio)
+        type_layout.addWidget(self.relative_radio)
         type_layout.addStretch()
         main_layout.addLayout(type_layout)
         
-        # 新增：提醒标题输入（单行）
-        title_row = QHBoxLayout()
-        title_row.setSpacing(6)
-        title_row_label = QLabel('提醒标题:')
-        trl_font = QFont(); trl_font.setPointSize(15)
-        title_row_label.setFont(trl_font)
-        title_row_label.setMinimumWidth(72)
-        self.title_edit = QLineEdit()
-        te_font = QFont(); te_font.setPointSize(15)
-        self.title_edit.setFont(te_font)
-        self.title_edit.setMinimumHeight(32)
-        self.title_edit.setPlaceholderText('例如：定时提醒 09:30')
-        try:
-            self.title_edit.setMaxLength(PetConfig.MAX_REMINDER_TITLE_LENGTH)
-        except Exception:
-            pass
-        self.title_edit.textEdited.connect(self._on_title_text_edited)
-        title_row.addWidget(title_row_label)
-        title_row.addWidget(self.title_edit)
-        main_layout.addLayout(title_row)
+        # 移除标题输入区域
         
         # 时间选择区域（单次提醒）
         self.time_layout = QHBoxLayout()
@@ -171,8 +157,36 @@ class ReminderDialog(QDialog):
         self.interval_layout.addStretch()
         main_layout.addLayout(self.interval_layout)
         
-        # 初始状态：隐藏循环提醒设置
+        # 相对时间提醒设置区域
+        self.relative_layout = QHBoxLayout()
+        self.relative_layout.setSpacing(4)
+        self.relative_label = QLabel('延迟时间:')
+        self.relative_label.setMinimumWidth(72)
+        relative_label_font = QFont()
+        relative_label_font.setPointSize(15)
+        self.relative_label.setFont(relative_label_font)
+        self.relative_spinbox = QSpinBox()
+        self.relative_spinbox.setRange(1, 999)
+        self.relative_spinbox.setValue(5)
+        self.relative_spinbox.setMinimumHeight(32)
+        self.relative_spinbox.setMinimumWidth(72)
+        relative_spin_font = QFont(); relative_spin_font.setPointSize(15)
+        self.relative_spinbox.setFont(relative_spin_font)
+        self.relative_unit_combo = QComboBox()
+        self.relative_unit_combo.addItems(['秒', '分钟', '小时'])
+        self.relative_unit_combo.setMinimumHeight(32)
+        self.relative_unit_combo.setMinimumWidth(72)
+        relative_unit_font = QFont(); relative_unit_font.setPointSize(15)
+        self.relative_unit_combo.setFont(relative_unit_font)
+        self.relative_layout.addWidget(self.relative_label)
+        self.relative_layout.addWidget(self.relative_spinbox)
+        self.relative_layout.addWidget(self.relative_unit_combo)
+        self.relative_layout.addStretch()
+        main_layout.addLayout(self.relative_layout)
+        
+        # 初始状态：隐藏循环提醒和相对时间设置
         self.toggle_interval_controls(False)
+        self.toggle_relative_controls(False)
         
         # 内容输入区域 -> 横向单行：标签 + 输入框
         content_layout = QHBoxLayout()
@@ -209,17 +223,14 @@ class ReminderDialog(QDialog):
         button_layout.addWidget(self.confirm_button)
         main_layout.addLayout(button_layout)
         
-        # 连接信号：用于自动维护默认标题
+        # 连接信号
         self.single_radio.toggled.connect(self.on_reminder_type_changed)
         self.repeat_radio.toggled.connect(self.on_reminder_type_changed)
-        self.time_edit.timeChanged.connect(self.on_title_deps_changed)
-        self.interval_spinbox.valueChanged.connect(self.on_title_deps_changed)
-        self.interval_unit_combo.currentTextChanged.connect(self.on_title_deps_changed)
+        self.relative_radio.toggled.connect(self.on_reminder_type_changed)
         
         self.setLayout(main_layout)
         
-        # 构建完成后，根据当前设置生成默认标题
-        self.on_title_deps_changed()
+        # 构建完成
     
     def get_reminder_time(self):
         """获取用户设置的提醒时间"""
@@ -229,14 +240,16 @@ class ReminderDialog(QDialog):
         """获取用户输入的提醒内容"""
         return self.content_edit.text().strip()
     
-    def get_reminder_title(self):
-        """获取提醒标题（若为空则给出默认值）"""
-        title = (self.title_edit.text().strip() if self.title_edit else '').strip()
-        return title or self.generate_default_title()
+    # 移除get_reminder_title方法
     
     def get_reminder_type(self):
         """获取提醒类型"""
-        return 'single' if self.single_radio.isChecked() else 'repeat'
+        if self.single_radio.isChecked():
+            return 'single'
+        elif self.repeat_radio.isChecked():
+            return 'repeat'
+        else:
+            return 'relative'
     
     def get_reminder_interval(self):
         """获取循环提醒间隔（分钟）"""
@@ -248,46 +261,47 @@ class ReminderDialog(QDialog):
             return value
         return 0
     
+    def get_relative_seconds(self):
+        """获取相对时间（秒）"""
+        value = self.relative_spinbox.value()
+        unit = self.relative_unit_combo.currentText()
+        if unit == '秒':
+            return value
+        elif unit == '分钟':
+            return value * 60
+        else:  # 小时
+            return value * 3600
+    
     def toggle_interval_controls(self, show):
         """切换循环提醒控件的显示状态"""
         self.interval_label.setVisible(show)
         self.interval_spinbox.setVisible(show)
         self.interval_unit_combo.setVisible(show)
     
+    def toggle_relative_controls(self, show):
+        """切换相对时间提醒控件的显示状态"""
+        self.relative_label.setVisible(show)
+        self.relative_spinbox.setVisible(show)
+        self.relative_unit_combo.setVisible(show)
+    
     def on_reminder_type_changed(self):
         """提醒类型改变事件处理"""
+        is_single = self.single_radio.isChecked()
         is_repeat = self.repeat_radio.isChecked()
+        is_relative = self.relative_radio.isChecked()
+        
+        # 控制各种控件的显示
         self.toggle_interval_controls(is_repeat)
+        self.toggle_relative_controls(is_relative)
         
-        # 切换时间选择控件的可见性
+        # 切换时间选择控件的可见性（只有单次提醒显示）
         time_label = self.time_layout.itemAt(0).widget()
-        time_label.setVisible(not is_repeat)
-        self.time_edit.setVisible(not is_repeat)
+        time_label.setVisible(is_single)
+        self.time_edit.setVisible(is_single)
         
-        # 类型切换后更新默认标题（若用户尚未手动编辑）
-        self.on_title_deps_changed()
+        # 类型切换完成
     
-    def _on_title_text_edited(self, _):
-        """用户手动编辑标题后，锁定默认同步逻辑"""
-        self._title_user_edited = True
-    
-    def on_title_deps_changed(self, *args):
-        """当时间、间隔或类型变化时，如果用户未手动编辑，则同步默认标题"""
-        if not self._title_user_edited and self.title_edit is not None:
-            self.title_edit.setText(self.generate_default_title())
-    
-    def generate_default_title(self) -> str:
-        """根据当前设置生成默认标题"""
-        if self.single_radio and self.single_radio.isChecked():
-            t = self.time_edit.time() if self.time_edit else QTime.currentTime()
-            return f"定时提醒 {t.toString('HH:mm')}"
-        # 循环提醒
-        val = self.interval_spinbox.value() if self.interval_spinbox else 1
-        unit = self.interval_unit_combo.currentText() if self.interval_unit_combo else '分钟'
-        if unit == '小时':
-            return f"循环提醒 每{val}小时"
-        else:
-            return f"循环提醒 每{val}分钟"
+    # 移除标题相关方法
     
     def accept_reminder(self):
         """确认按钮处理"""
@@ -312,7 +326,7 @@ class ReminderDialog(QDialog):
                     if hasattr(self, 'time_edit') and self.time_edit:
                         self.time_edit.setFocus()
                     return
-            else:
+            elif reminder_type == 'repeat':
                 # 循环提醒：验证间隔
                 interval = self.get_reminder_interval()
                 if interval < 1:
@@ -320,6 +334,32 @@ class ReminderDialog(QDialog):
                     if hasattr(self, 'interval_spinbox') and self.interval_spinbox:
                         self.interval_spinbox.setFocus()
                     return
+            else:
+                # 相对时间提醒：验证延迟时间
+                relative_seconds = self.get_relative_seconds()
+                if relative_seconds < 1:
+                    QMessageBox.warning(self, '时间错误', '延迟时间不能小于1秒！')
+                    if hasattr(self, 'relative_spinbox') and self.relative_spinbox:
+                        self.relative_spinbox.setFocus()
+                    return
+            
+            # 验证通过，发送信号给主窗口
+            if self.get_reminder_type() == 'relative':
+                self.reminder_added.emit(
+                    self.get_reminder_content(),
+                    QTime.currentTime(),  # 相对时间提醒使用当前时间作为占位符
+                    self.get_reminder_type(),
+                    0,  # 相对时间提醒不需要间隔
+                    self.get_relative_seconds()  # 添加相对秒数参数
+                )
+            else:
+                self.reminder_added.emit(
+                    self.get_reminder_content(),
+                    self.get_reminder_time(),
+                    self.get_reminder_type(),
+                    self.get_reminder_interval(),
+                    0  # 非相对时间提醒的相对秒数为0
+                )
             
             # 验证通过，安全接受对话框
             self.safe_accept()
@@ -346,21 +386,21 @@ class ReminderDialog(QDialog):
             # 强制关闭对话框
             self.close()
     
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, a0):
         """键盘事件处理"""
         try:
             # 按Enter键确认
-            if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            if a0.key() == Qt.Key_Return or a0.key() == Qt.Key_Enter:
                 self.accept_reminder()
             # 按Escape键取消
-            elif event.key() == Qt.Key_Escape:
+            elif a0.key() == Qt.Key_Escape:
                 self.safe_reject()
             else:
-                super().keyPressEvent(event)
+                super().keyPressEvent(a0)
         except Exception as e:
             print(f"keyPressEvent error: {e}")
     
-    def closeEvent(self, event):
+    def closeEvent(self, a0):
         """窗口关闭事件处理"""
         try:
             # 清理资源
@@ -377,7 +417,7 @@ class ReminderDialog(QDialog):
             if hasattr(self, 'cancel_button'):
                 self.cancel_button.clicked.disconnect()
             
-            event.accept()
+            a0.accept()
         except Exception as e:
             print(f"closeEvent error: {e}")
             event.accept()
