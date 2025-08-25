@@ -13,8 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer, QTime, QStandardPaths, QRectF, QPointF
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QPainterPath, QFont, QCursor, QPen
-from PyQt5.QtCore import Qt as QtCore
-from PyQt5.QtGui import QPen as QtPen
+from PyQt5.QtWidgets import QDesktopWidget
 
 from pet_state import PetState
 from config import PetConfig
@@ -22,6 +21,11 @@ from reminder_dialog import ReminderDialog
 from reminder_list_dialog import ReminderListDialog
 from reminder_manager import ReminderManager
 from settings_dialog import SettingsDialog
+from login_dialog import LoginDialog
+from register_dialog import RegisterDialog
+from user_auth import user_auth
+from friends_dialog import FriendsDialog
+from chat_window import ChatWindow
 
 # PyInstaller资源路径辅助函数
 def resource_path(relative_path: str) -> str:
@@ -178,6 +182,9 @@ class DesktopPet(QWidget):
         # 初始化提醒管理器
         self.init_reminder_manager()
         
+        # 初始化用户系统
+        self.init_user_system()
+        
         # 加载设置
         self.load_settings()
         
@@ -214,11 +221,12 @@ class DesktopPet(QWidget):
         # 设置窗口标题
         self.setWindowTitle('桌面宠物')
         
-        # 设置窗口标志：无边框、置顶（移除Qt.Tool以修复macOS置顶问题）
+        # 设置窗口标志：无边框、置顶、工具窗口（隐藏程序坞图标）
         self.setWindowFlags(
             Qt.FramelessWindowHint |  # 无边框
             Qt.WindowStaysOnTopHint |  # 置顶
-            Qt.WindowDoesNotAcceptFocus  # 不接受焦点，避免干扰其他程序
+            Qt.WindowDoesNotAcceptFocus |  # 不接受焦点，避免干扰其他程序
+            Qt.Tool  # 工具窗口，不在程序坞显示
         )
         
         # 设置透明背景
@@ -234,9 +242,21 @@ class DesktopPet(QWidget):
     
     def init_reminder_manager(self):
         """初始化提醒管理器"""
-        self.reminder_manager = ReminderManager(self)
+        self.reminder_manager = ReminderManager()
         # 连接提醒触发信号
         self.reminder_manager.reminder_triggered.connect(self.on_reminder_triggered)
+    
+    def init_user_system(self):
+        """初始化用户系统"""
+        # 用户系统相关的对话框
+        self.login_dialog = None
+        self.register_dialog = None
+        
+        # 应用启动时尝试自动登录（记住我）
+        try:
+            self.try_auto_login()
+        except Exception as e:
+            print(f"自动登录检查失败: {e}")
     
     def load_images(self):
         """加载宠物图像"""
@@ -319,6 +339,15 @@ class DesktopPet(QWidget):
         state_key = new_state.value
         
         if state_key in self.images:
+            # Mac特定处理：临时隐藏窗口以避免透明残影
+            import platform
+            is_macos = platform.system() == 'Darwin'
+            
+            if is_macos:
+                # 临时隐藏窗口
+                self.hide()
+                QApplication.processEvents()
+            
             # 彻底清除QLabel的内容和背景
             self.pet_label.clear()
             self.pet_label.setAutoFillBackground(False)
@@ -329,6 +358,13 @@ class DesktopPet(QWidget):
             
             # 设置新的图像
             self.pet_label.setPixmap(self.images[state_key])
+            
+            if is_macos:
+                # Mac特定：重新显示窗口
+                self.show()
+                # 额外的Mac刷新处理
+                self.setAttribute(Qt.WA_TranslucentBackground, False)
+                self.setAttribute(Qt.WA_TranslucentBackground, True)
             
             # 多重强制刷新机制
             self.pet_label.repaint()  # 强制重绘
@@ -418,6 +454,31 @@ class DesktopPet(QWidget):
         
         context_menu.addSeparator()
         
+        # 添加用户系统菜单
+        if user_auth.is_user_logged_in():
+            # 已登录状态
+            current_user = user_auth.get_current_user()
+            user_info_action = QAction(f'用户: {current_user["username"]}', self)
+            user_info_action.setEnabled(False)
+            context_menu.addAction(user_info_action)
+            
+            # 好友管理
+            friends_action = QAction('好友管理', self)
+            friends_action.triggered.connect(self.show_friends_dialog)
+            context_menu.addAction(friends_action)
+            
+            # 登出
+            logout_action = QAction('登出', self)
+            logout_action.triggered.connect(self.handle_logout)
+            context_menu.addAction(logout_action)
+        else:
+            # 未登录状态
+            login_action = QAction('登录', self)
+            login_action.triggered.connect(self.show_login_dialog)
+            context_menu.addAction(login_action)
+        
+        context_menu.addSeparator()
+        
         # 添加设置选项
         settings_action = QAction('设置', self)
         settings_action.triggered.connect(self.show_settings_dialog)
@@ -430,6 +491,235 @@ class DesktopPet(QWidget):
         
         # 显示菜单
         context_menu.exec_(a0.globalPos())
+    
+    def show_login_dialog(self):
+        """显示登录对话框"""
+        if self.login_dialog is None:
+            self.login_dialog = LoginDialog(self)
+            self.login_dialog.login_success.connect(self.on_login_success)
+            self.login_dialog.switch_to_register.connect(self.show_register_dialog)
+        
+        # 设置对话框位置（在宠物附近）
+        pet_pos = self.pos()
+        dialog_x = pet_pos.x() + self.width() + 10
+        dialog_y = pet_pos.y()
+        
+        # 确保对话框不会超出屏幕
+        rect = self._available_rect()
+        if dialog_x + self.login_dialog.width() > rect.right():
+            dialog_x = pet_pos.x() - self.login_dialog.width() - 10
+        if dialog_x < rect.left():
+            dialog_x = rect.left() + 10
+        if dialog_y + self.login_dialog.height() > rect.bottom():
+            dialog_y = rect.bottom() - self.login_dialog.height() - 50
+        if dialog_y < rect.top():
+            dialog_y = rect.top() + 10
+        
+        self.login_dialog.move(dialog_x, dialog_y)
+        self.login_dialog.show()
+    
+    def show_register_dialog(self):
+        """显示注册对话框"""
+        if self.register_dialog is None:
+            self.register_dialog = RegisterDialog(self)
+            self.register_dialog.register_success.connect(self.on_register_success)
+            self.register_dialog.switch_to_login.connect(self.show_login_dialog)
+        
+        # 设置对话框位置（在宠物附近）
+        pet_pos = self.pos()
+        dialog_x = pet_pos.x() + self.width() + 10
+        dialog_y = pet_pos.y()
+        
+        # 确保对话框不会超出屏幕
+        rect = self._available_rect()
+        if dialog_x + self.register_dialog.width() > rect.right():
+            dialog_x = pet_pos.x() - self.register_dialog.width() - 10
+        if dialog_x < rect.left():
+            dialog_x = rect.left() + 10
+        if dialog_y + self.register_dialog.height() > rect.bottom():
+            dialog_y = rect.bottom() - self.register_dialog.height() - 50
+        if dialog_y < rect.top():
+            dialog_y = rect.top() + 10
+        
+        self.register_dialog.move(dialog_x, dialog_y)
+        self.register_dialog.show()
+    
+    def on_login_success(self, user_info):
+        """处理登录成功"""
+        print(f"用户 {user_info['username']} 登录成功")
+        
+        # 关闭登录对话框
+        if self.login_dialog:
+            self.login_dialog.close()
+        
+        # 处理“记住我”
+        try:
+            if user_info.get('remember_me'):
+                self.save_remember_session(user_info.get('user_id'), user_info.get('username'))
+            else:
+                self.clear_remember_session()
+        except Exception as e:
+            print(f"保存记住我状态失败: {e}")
+        
+        # 更新菜单状态
+        self.update_menu()
+        
+        # 可以在这里添加登录成功后的处理逻辑
+        # 比如显示欢迎消息等
+    
+    def on_register_success(self, user_info):
+        """处理注册成功"""
+        print(f"用户 {user_info['username']} 注册并登录成功")
+        # 可以在这里添加注册成功后的处理逻辑
+    
+    def handle_logout(self):
+        """处理登出"""
+        # 立即更新UI状态，给用户即时反馈
+        print("正在登出...")
+        
+        # 异步执行登出操作
+        from async_worker import LogoutWorker, task_manager
+        
+        self.logout_worker = task_manager.run_task(LogoutWorker)
+        self.logout_worker.progress.connect(lambda msg: print(msg))
+        self.logout_worker.finished.connect(self.on_logout_finished)
+        self.logout_worker.error.connect(self.on_logout_error)
+    
+    def on_logout_finished(self, result: dict):
+        """登出完成"""
+        if result.get('success'):
+            # 清除所有缓存数据
+            from cache_manager import user_cache
+            user_cache.clear_all()
+            
+            # 清除记住我会话
+            try:
+                self.clear_remember_session()
+            except Exception as e:
+                print(f"清除记住我会话失败: {e}")
+            
+            # 关闭与登录状态相关的窗口（好友管理、聊天窗口等）
+            try:
+                self.close_login_related_windows()
+            except Exception as e:
+                print(f"关闭登录相关窗口时出错: {e}")
+            
+            # 更新菜单状态
+            self.update_menu()
+            print("用户已登出")
+        else:
+            print(f"登出失败: {result.get('message', '未知错误')}")
+    
+    def on_logout_error(self, error_message: str):
+        """登出错误"""
+        print(f"登出时出错: {error_message}")
+    
+    def show_friends_dialog(self):
+        """显示好友管理对话框"""
+        if not user_auth.is_user_logged_in():
+            QMessageBox.warning(self, "提示", "请先登录")
+            return
+        
+        # 如果已打开，置顶并返回
+        try:
+            if hasattr(self, 'friends_dialog') and self.friends_dialog is not None:
+                if self.friends_dialog.isVisible():
+                    self.friends_dialog.raise_()
+                    self.friends_dialog.activateWindow()
+                    return
+        except Exception:
+            pass
+        
+        # 创建新的对话框实例
+        dialog = FriendsDialog(self)
+        dialog.chat_requested.connect(self.on_chat_requested)
+        
+        # 设置对话框位置（在宠物附近）
+        pet_pos = self.pos()
+        dialog_x = pet_pos.x() + self.width() + 10
+        dialog_y = pet_pos.y()
+        
+        # 确保对话框不会超出屏幕
+        rect = self._available_rect()
+        if dialog_x + dialog.width() > rect.right():
+            dialog_x = pet_pos.x() - dialog.width() - 10
+        if dialog_x < rect.left():
+            dialog_x = rect.left() + 10
+        if dialog_y + dialog.height() > rect.bottom():
+            dialog_y = rect.bottom() - dialog.height() - 50
+        if dialog_y < rect.top():
+            dialog_y = rect.top() + 10
+        
+        dialog.move(dialog_x, dialog_y)
+        
+        # 保持引用并以非模态方式显示
+        self.friends_dialog = dialog
+        dialog.setModal(False)
+        dialog.show()
+    
+    def on_chat_requested(self, friend_id, username):
+        """处理聊天请求"""
+        if not user_auth.is_user_logged_in():
+            QMessageBox.warning(self, "提示", "请先登录")
+            return
+        
+        # 创建聊天窗口
+        chat_window = ChatWindow(friend_id, username, self)
+        
+        # 设置聊天窗口位置（在宠物附近）
+        pet_pos = self.pos()
+        chat_x = pet_pos.x() + self.width() + 10
+        chat_y = pet_pos.y()
+        
+        # 确保聊天窗口不会超出屏幕
+        rect = self._available_rect()
+        if chat_x + chat_window.width() > rect.right():
+            chat_x = pet_pos.x() - chat_window.width() - 10
+        if chat_x < rect.left():
+            chat_x = rect.left() + 10
+        if chat_y + chat_window.height() > rect.bottom():
+            chat_y = rect.bottom() - chat_window.height() - 50
+        if chat_y < rect.top():
+            chat_y = rect.top() + 10
+        
+        chat_window.move(chat_x, chat_y)
+        chat_window.show()
+    
+    def close_login_related_windows(self):
+        """关闭与登录状态相关的所有窗口，如好友管理和聊天窗口。"""
+        # 关闭好友管理对话框
+        try:
+            if hasattr(self, 'friends_dialog') and self.friends_dialog is not None:
+                if self.friends_dialog.isVisible():
+                    self.friends_dialog.close()
+                self.friends_dialog = None
+        except Exception as e:
+            print(f"关闭好友管理对话框失败: {e}")
+        
+        # 关闭所有聊天窗口（作为当前窗口的子窗口）
+        try:
+            for w in self.findChildren(ChatWindow):
+                if w.isVisible():
+                    w.close()
+        except Exception as e:
+            print(f"关闭聊天窗口失败: {e}")
+        
+        # 关闭登录/注册对话框（如果存在）
+        try:
+            if hasattr(self, 'login_dialog') and self.login_dialog is not None:
+                if self.login_dialog.isVisible():
+                    self.login_dialog.close()
+                self.login_dialog = None
+        except Exception as e:
+            print(f"关闭登录对话框失败: {e}")
+        
+        try:
+            if hasattr(self, 'register_dialog') and self.register_dialog is not None:
+                if self.register_dialog.isVisible():
+                    self.register_dialog.close()
+                self.register_dialog = None
+        except Exception as e:
+            print(f"关闭注册对话框失败: {e}")
     
     def show_settings_dialog(self):
         """显示设置对话框"""
@@ -1092,3 +1382,65 @@ class DesktopPet(QWidget):
                 )
         except Exception as e:
             print(f"重建缩放图像失败: {e}")
+
+    def _remember_file_path(self) -> str:
+        """获取记住我会话文件路径"""
+        import os
+        base_dir = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+        if not base_dir:
+            base_dir = os.path.expanduser('~/.desktop_pet')
+        os.makedirs(base_dir, exist_ok=True)
+        return os.path.join(base_dir, 'remember_me.json')
+
+    def save_remember_session(self, user_id, username):
+        """保存记住我会话信息"""
+        import json, os
+        if not user_id or not username:
+            return
+        data = {
+            'user_id': str(user_id),
+            'username': username,
+            'ts': int(__import__('time').time())
+        }
+        path = self._remember_file_path()
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+
+    def clear_remember_session(self):
+        """清除记住我会话信息"""
+        import os
+        path = self._remember_file_path()
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            print(f"删除remember_me文件失败: {e}")
+
+    def try_auto_login(self):
+        """尝试根据本地会话自动登录"""
+        import json, os
+        path = self._remember_file_path()
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            user_id = data.get('user_id')
+            if not user_id:
+                return
+            # 调用用户系统恢复会话
+            from user_auth import user_auth
+            result = user_auth.restore_session(user_id)
+            if result.get('success'):
+                print(f"自动登录成功：{result.get('username')}")
+                # 若登录框当前存在，关闭它
+                if self.login_dialog:
+                    self.login_dialog.close()
+                # 刷新菜单以反映登录状态
+                self.update_menu()
+            else:
+                # 恢复失败则清理会话文件，避免下次反复失败
+                self.clear_remember_session()
+                print(f"自动登录失败: {result.get('message')}")
+        except Exception as e:
+            print(f"读取自动登录信息失败: {e}")

@@ -8,7 +8,7 @@
 import sys
 import os
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QCoreApplication
 from PyQt5.QtGui import QIcon
 
 # 添加当前目录到Python路径
@@ -60,6 +60,12 @@ def main():
         return 1
     
     try:
+        # 在创建 QApplication 之前启用高DPI缩放（对 macOS/Retina 至关重要）
+        try:
+            QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+            QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+        except Exception:
+            pass
         # 创建应用程序实例
         app = QApplication(sys.argv)
         
