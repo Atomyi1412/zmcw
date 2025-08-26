@@ -56,7 +56,13 @@ python3 main.py
 ### 下载预编译版本
 访问 [Releases](https://github.com/Atomyi1412/zmcw/releases) 页面下载：
 - **Windows**：`DesktopPet-Windows-Installer.exe`
-- **macOS**：`DesktopPet-v1.4.0.dmg`
+- **macOS**：`DesktopPet-v1.4.1.dmg`
+
+#### v1.4.1 更新说明（推荐）
+- 🔥 **修复关键问题**：解决bcrypt模块导入错误导致的闪退问题
+- ✅ 完善PyInstaller打包配置，确保所有依赖正确包含
+- ✅ 修复Mac版本从GitHub下载后无法启动的问题
+- ✅ 提升应用稳定性和兼容性
 
 #### v1.4.0 更新说明
 - ✅ 修复Mac版本兼容性问题
