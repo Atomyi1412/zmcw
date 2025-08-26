@@ -64,6 +64,15 @@ python3 main.py
 - ✅ 提升应用启动稳定性
 - ✅ 优化资源路径处理逻辑
 
+#### Mac安装问题解决
+如果Mac版本下载后无法打开或闪退，请参考：
+- 📖 [Mac安装说明](Mac安装说明.md) - 详细解决方案
+- 🔧 [一键修复脚本](fix_mac_quarantine.sh) - 自动移除隔离属性
+
+**快速解决方法：**
+1. 右键点击应用选择"打开"
+2. 或在终端执行：`xattr -d com.apple.quarantine /Applications/DesktopPet.app`
+
 ## 📱 使用说明
 
 ### 基础操作
