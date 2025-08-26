@@ -34,20 +34,11 @@ class UserAuth:
             limits=httpx.Limits(
                 max_keepalive_connections=5,
                 max_connections=10
-            ),
-            retries=3  # 重试3次
+            )
         )
         
         # 创建Supabase客户端
-        self.supabase: Client = create_client(
-            self.supabase_url, 
-            self.supabase_key,
-            options={
-                'postgrest': {
-                    'client': self.http_client
-                }
-            }
-        )
+        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
         
         # 当前登录用户信息
         self.current_user: Optional[Dict[str, Any]] = None
