@@ -56,7 +56,13 @@ python3 main.py
 ### 下载预编译版本
 访问 [Releases](https://github.com/Atomyi1412/zmcw/releases) 页面下载：
 - **Windows**：`DesktopPet-Windows-Installer.exe`
-- **macOS**：`DesktopPet-macOS.dmg`
+- **macOS**：`DesktopPet-v1.4.0.dmg`
+
+#### v1.4.0 更新说明
+- ✅ 修复Mac版本兼容性问题
+- ✅ 解决PyQt5高DPI属性访问错误
+- ✅ 提升应用启动稳定性
+- ✅ 优化资源路径处理逻辑
 
 ## 📱 使用说明
 
