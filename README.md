@@ -56,10 +56,15 @@ python3 main.py
 ### 下载预编译版本
 访问 [Releases](https://github.com/Atomyi1412/zmcw/releases) 页面下载：
 - **Windows**：`DesktopPet-Windows-Installer.exe`
-- **macOS**：`DesktopPet-v1.4.1.dmg`
+- **macOS**：`DesktopPet-v1.4.2.dmg`
 
-#### v1.4.1 更新说明（推荐）
-- 🔥 **修复关键问题**：解决bcrypt模块导入错误导致的闪退问题
+#### v1.4.2 更新说明（推荐）
+- 🔥 进一步修复macOS启动问题：确保 bcrypt 扩展在 DMG 安装后可被正确加载
+- ✅ 在打包入口中增强 macOS 下的 sys.path 配置（Contents/Resources、Frameworks、lib-dynload）
+- ✅ 在打包配置中显式收集 bcrypt 纯包和 `_bcrypt.abi3.so` 扩展
+
+#### v1.4.1 更新说明（历史）
+- 🔥 修复关键问题：解决bcrypt模块导入错误导致的闪退问题
 - ✅ 完善PyInstaller打包配置，确保所有依赖正确包含
 - ✅ 修复Mac版本从GitHub下载后无法启动的问题
 - ✅ 提升应用稳定性和兼容性
@@ -77,7 +82,7 @@ python3 main.py
 
 **快速解决方法：**
 1. 右键点击应用选择"打开"
-2. 或在终端执行：`xattr -d com.apple.quarantine /Applications/DesktopPet.app`
+2. 或在终端执行：`xattr -rd com.apple.quarantine /Applications/DesktopPet.app`
 
 ## 📱 使用说明
 
