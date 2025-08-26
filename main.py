@@ -11,6 +11,15 @@ from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon, QMenu, Q
 from PyQt5.QtCore import Qt, QCoreApplication
 from PyQt5.QtGui import QIcon
 
+# 兼容不同PyQt5版本的高DPI设置
+try:
+    from PyQt5.QtCore import Qt
+    AA_EnableHighDpiScaling = getattr(Qt, 'AA_EnableHighDpiScaling', None)
+    AA_UseHighDpiPixmaps = getattr(Qt, 'AA_UseHighDpiPixmaps', None)
+except (ImportError, AttributeError):
+    AA_EnableHighDpiScaling = None
+    AA_UseHighDpiPixmaps = None
+
 # 添加当前目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -62,8 +71,10 @@ def main():
     try:
         # 在创建 QApplication 之前启用高DPI缩放（对 macOS/Retina 至关重要）
         try:
-            QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-            QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+            if AA_EnableHighDpiScaling is not None:
+                QCoreApplication.setAttribute(AA_EnableHighDpiScaling, True)
+            if AA_UseHighDpiPixmaps is not None:
+                QCoreApplication.setAttribute(AA_UseHighDpiPixmaps, True)
         except Exception:
             pass
         # 创建应用程序实例
