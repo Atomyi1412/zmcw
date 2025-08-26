@@ -1,12 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+import os
+try:
+    import bcrypt as _bcrypt_pkg
+except Exception:
+    _bcrypt_pkg = None
+
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets')],
-    hiddenimports=['bcrypt', 'bcrypt._bcrypt', 'user_auth'],
+    datas=[('assets', 'assets')] + (collect_data_files('bcrypt') if True else [] ) + (
+        [ (os.path.join(os.path.dirname(_bcrypt_pkg.__file__), '_bcrypt.abi3.so'), 'bcrypt') ] if _bcrypt_pkg and os.path.exists(os.path.join(os.path.dirname(_bcrypt_pkg.__file__), '_bcrypt.abi3.so')) else []
+    ),
+    hiddenimports=collect_submodules('bcrypt') + ['user_auth'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
