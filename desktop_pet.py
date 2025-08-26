@@ -492,6 +492,11 @@ class DesktopPet(QWidget):
         # 显示菜单
         context_menu.exec_(a0.globalPos())
     
+    def update_menu(self):
+        """更新菜单状态 - 由于菜单是动态创建的，此方法暂时为空"""
+        # 菜单在 contextMenuEvent 中动态创建，无需额外更新
+        pass
+    
     def show_login_dialog(self):
         """显示登录对话框"""
         if self.login_dialog is None:
