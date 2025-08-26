@@ -98,14 +98,11 @@ jobs:
             Write-Host "assets/icon.png not found, skip icon generation"
           }
 
-      - name: Build app with PyInstaller
+      - name: Build app with PyInstaller (spec)
         shell: pwsh
         run: |
-          Write-Host "Building with PyInstaller..."
-          $pyArgs = @("--noconfirm", "--name", "DesktopPet", "--windowed", "--add-data=assets;assets")
-          if (Test-Path "assets\app.ico") { $pyArgs += @("--icon", "assets\app.ico") }
-          $pyArgs += "main.py"
-          python -m PyInstaller @$pyArgs
+          Write-Host "Building with PyInstaller (spec)..."
+          pyinstaller DesktopPet.spec --noconfirm
           
           if (Test-Path "dist\DesktopPet") {
             Write-Host "✓ PyInstaller build successful"
