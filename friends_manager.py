@@ -8,6 +8,7 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from user_auth import user_auth
+import time
 
 class FriendsManager:
     """好友管理类"""
@@ -15,6 +16,31 @@ class FriendsManager:
     def __init__(self):
         """初始化好友管理器"""
         self.supabase = user_auth.supabase
+    
+    def _handle_network_error(self, e: Exception, operation: str) -> Dict[str, Any]:
+        """处理网络错误并返回用户友好的错误信息
+        
+        Args:
+            e: 异常对象
+            operation: 操作描述
+            
+        Returns:
+            包含错误信息的字典
+        """
+        return user_auth._handle_network_error(e, operation)
+    
+    def _retry_operation(self, operation_func, operation_name: str, max_retries: int = 3):
+        """重试网络操作
+        
+        Args:
+            operation_func: 要执行的操作函数
+            operation_name: 操作名称
+            max_retries: 最大重试次数
+            
+        Returns:
+            操作结果
+        """
+        return user_auth._retry_operation(operation_func, operation_name, max_retries)
     
     def send_friend_request(self, target_username: str, message: str = None) -> Dict[str, Any]:
         """发送好友请求
@@ -26,11 +52,11 @@ class FriendsManager:
         Returns:
             请求结果字典
         """
-        try:
-            current_user = user_auth.get_current_user()
-            if not current_user:
-                return {"success": False, "message": "请先登录"}
-            
+        current_user = user_auth.get_current_user()
+        if not current_user:
+            return {"success": False, "message": "请先登录"}
+        
+        def send_request_operation():
             # 查找目标用户
             target_result = self.supabase.table('users').select('id, username').eq('username', target_username).execute()
             if not target_result.data:
@@ -79,9 +105,8 @@ class FriendsManager:
                 }
             else:
                 return {"success": False, "message": "发送好友请求失败"}
-                
-        except Exception as e:
-            return {"success": False, "message": f"发送好友请求时出错: {str(e)}"}
+        
+        return self._retry_operation(send_request_operation, "发送好友请求")
     
     def get_friend_requests(self, request_type: str = "received") -> Dict[str, Any]:
         """获取好友请求列表
@@ -92,11 +117,11 @@ class FriendsManager:
         Returns:
             请求列表字典
         """
-        try:
-            current_user = user_auth.get_current_user()
-            if not current_user:
-                return {"success": False, "message": "请先登录", "requests": []}
-            
+        current_user = user_auth.get_current_user()
+        if not current_user:
+            return {"success": False, "message": "请先登录", "requests": []}
+        
+        def get_requests_operation():
             if request_type == "received":
                 # 获取收到的好友请求
                 result = self.supabase.table('friend_requests').select(
@@ -134,9 +159,14 @@ class FriendsManager:
                 "requests": requests,
                 "total": len(requests)
             }
-            
-        except Exception as e:
-            return {"success": False, "message": f"获取好友请求时出错: {str(e)}", "requests": []}
+        
+        result = self._retry_operation(get_requests_operation, "获取好友请求")
+        if not result.get('success'):
+            # 网络错误时返回空结果
+            result["requests"] = []
+            result["total"] = 0
+        
+        return result
     
     def respond_to_friend_request(self, request_id: str, action: str) -> Dict[str, Any]:
         """回应好友请求
@@ -148,14 +178,14 @@ class FriendsManager:
         Returns:
             操作结果字典
         """
-        try:
-            current_user = user_auth.get_current_user()
-            if not current_user:
-                return {"success": False, "message": "请先登录"}
-            
-            if action not in ["accept", "reject"]:
-                return {"success": False, "message": "无效的操作类型"}
-            
+        current_user = user_auth.get_current_user()
+        if not current_user:
+            return {"success": False, "message": "请先登录"}
+        
+        if action not in ["accept", "reject"]:
+            return {"success": False, "message": "无效的操作类型"}
+        
+        def respond_operation():
             # 获取好友请求信息
             request_result = self.supabase.table('friend_requests').select(
                 'id, sender_id, receiver_id, status'
@@ -186,9 +216,8 @@ class FriendsManager:
                 return {"success": True, "message": "已接受好友请求"}
             else:
                 return {"success": True, "message": "已拒绝好友请求"}
-                
-        except Exception as e:
-            return {"success": False, "message": f"处理好友请求时出错: {str(e)}"}
+        
+        return self._retry_operation(respond_operation, "处理好友请求")
     
     def get_friends_list(self) -> Dict[str, Any]:
         """获取好友列表
@@ -196,11 +225,11 @@ class FriendsManager:
         Returns:
             好友列表字典
         """
-        try:
-            current_user = user_auth.get_current_user()
-            if not current_user:
-                return {"success": False, "message": "请先登录", "friends": []}
-            
+        current_user = user_auth.get_current_user()
+        if not current_user:
+            return {"success": False, "message": "请先登录", "friends": []}
+        
+        def get_friends_operation():
             # 获取好友关系
             result = self.supabase.table('friendships').select(
                 'id, user1_id, user2_id, created_at'
@@ -235,9 +264,14 @@ class FriendsManager:
                 "friends": friends,
                 "total": len(friends)
             }
-            
-        except Exception as e:
-            return {"success": False, "message": f"获取好友列表时出错: {str(e)}", "friends": []}
+        
+        result = self._retry_operation(get_friends_operation, "获取好友列表")
+        if not result.get('success'):
+            # 网络错误时返回空结果
+            result["friends"] = []
+            result["total"] = 0
+        
+        return result
     
     def remove_friend(self, friend_id: str) -> Dict[str, Any]:
         """删除好友
@@ -248,11 +282,11 @@ class FriendsManager:
         Returns:
             删除结果字典
         """
-        try:
-            current_user = user_auth.get_current_user()
-            if not current_user:
-                return {"success": False, "message": "请先登录"}
-            
+        current_user = user_auth.get_current_user()
+        if not current_user:
+            return {"success": False, "message": "请先登录"}
+        
+        def remove_operation():
             # 删除好友关系
             result = self.supabase.table('friendships').delete().or_(
                 f'and(user1_id.eq.{current_user["id"]},user2_id.eq.{friend_id}),'
@@ -263,9 +297,8 @@ class FriendsManager:
                 return {"success": True, "message": "已删除好友"}
             else:
                 return {"success": False, "message": "好友关系不存在"}
-                
-        except Exception as e:
-            return {"success": False, "message": f"删除好友时出错: {str(e)}"}
+        
+        return self._retry_operation(remove_operation, "删除好友")
     
     def search_users(self, query: str) -> Dict[str, Any]:
         """搜索用户（用于添加好友）

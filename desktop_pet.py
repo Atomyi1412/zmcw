@@ -26,6 +26,8 @@ from register_dialog import RegisterDialog
 from user_auth import user_auth
 from friends_dialog import FriendsDialog
 from chat_window import ChatWindow
+from friends_manager import friends_manager
+from chat_database import chat_db
 
 # PyInstaller资源路径辅助函数
 def resource_path(relative_path: str) -> str:
@@ -37,7 +39,7 @@ def resource_path(relative_path: str) -> str:
 
 class SpeechBubbleDialog(QDialog):
     """漫画人物说话气泡样式的提醒框"""
-    def __init__(self, title: str, content: str, parent=None):
+    def __init__(self, title: str, content: str, parent=None, button_text: str = "知道啦"): 
         super().__init__(parent)
         self.title = title
         self.content = content
@@ -70,7 +72,7 @@ class SpeechBubbleDialog(QDialog):
         content_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         content_label.setMaximumWidth(self.max_width - 36)
 
-        btn = QPushButton("知道啦")
+        btn = QPushButton(button_text)
         btn.setCursor(Qt.PointingHandCursor)
         btn.setFixedHeight(34)
         btn_font = QFont()
@@ -176,6 +178,13 @@ class DesktopPet(QWidget):
         self.original_position = QPoint()
         self.current_settings = {}  # 当前设置
         
+        # 好友消息轮询属性（提前初始化，避免自动登录期间访问不存在的属性）
+        self.message_check_timer = None
+        self.friend_name_cache = {}
+        self.notified_senders = set()
+        # 创建消息检查定时器（未登录时不会启动）
+        self.init_message_checker()
+        
         # 初始化窗口
         self.init_window()
         
@@ -209,6 +218,8 @@ class DesktopPet(QWidget):
         
         # 设置初始位置
         self.set_initial_position()
+        
+        # 消息轮询属性与定时器已在前面初始化
         
         # 显示宠物
         self.change_pet_state(PetState.NORMAL)
@@ -550,7 +561,7 @@ class DesktopPet(QWidget):
         self.register_dialog.show()
     
     def on_login_success(self, user_info):
-        """处理登录成功"""
+        """登录成功回调"""
         print(f"用户 {user_info['username']} 登录成功")
         
         # 关闭登录对话框
@@ -569,6 +580,17 @@ class DesktopPet(QWidget):
         # 更新菜单状态
         self.update_menu()
         
+        # 启动好友消息轮询并清空缓存
+        try:
+            self.friend_name_cache.clear()
+            self.notified_senders.clear()
+            if self.message_check_timer:
+                self.message_check_timer.start()
+            else:
+                self.init_message_checker()
+        except Exception as e:
+            print(f"启动消息轮询失败: {e}")
+        
         # 可以在这里添加登录成功后的处理逻辑
         # 比如显示欢迎消息等
     
@@ -578,7 +600,7 @@ class DesktopPet(QWidget):
         # 可以在这里添加注册成功后的处理逻辑
     
     def handle_logout(self):
-        """处理登出"""
+        """处理登出操作"""
         # 立即更新UI状态，给用户即时反馈
         print("正在登出...")
         
@@ -591,11 +613,20 @@ class DesktopPet(QWidget):
         self.logout_worker.error.connect(self.on_logout_error)
     
     def on_logout_finished(self, result: dict):
-        """登出完成"""
+        """登出完成回调"""
         if result.get('success'):
             # 清除所有缓存数据
             from cache_manager import user_cache
             user_cache.clear_all()
+            
+            # 停止消息轮询并清理相关缓存
+            try:
+                if self.message_check_timer and self.message_check_timer.isActive():
+                    self.message_check_timer.stop()
+                self.friend_name_cache.clear()
+                self.notified_senders.clear()
+            except Exception as e:
+                print(f"停止消息轮询失败: {e}")
             
             # 清除记住我会话
             try:
@@ -1335,6 +1366,13 @@ class DesktopPet(QWidget):
         if self.reminder_manager:
             self.reminder_manager.stop_all_reminders()
         
+        # 新增：停止消息轮询
+        try:
+            if self.message_check_timer and self.message_check_timer.isActive():
+                self.message_check_timer.stop()
+        except Exception:
+            pass
+        
         a0.accept()
 
     def apply_scale(self, scale: float):
@@ -1443,9 +1481,134 @@ class DesktopPet(QWidget):
                     self.login_dialog.close()
                 # 刷新菜单以反映登录状态
                 self.update_menu()
+                
+                # 自动登录成功后：启动消息轮询并清空相关缓存
+                try:
+                    if hasattr(self, 'friend_name_cache') and isinstance(self.friend_name_cache, dict):
+                        self.friend_name_cache.clear()
+                    if hasattr(self, 'notified_senders') and isinstance(self.notified_senders, set):
+                        self.notified_senders.clear()
+                    if hasattr(self, 'message_check_timer') and self.message_check_timer is not None:
+                        self.message_check_timer.start()
+                    # 立即检查一次，提升首次提醒的及时性
+                    if hasattr(self, 'check_new_messages'):
+                        self.check_new_messages()
+                except Exception as e:
+                    print(f"自动登录后启动消息轮询失败: {e}")
             else:
                 # 恢复失败则清理会话文件，避免下次反复失败
                 self.clear_remember_session()
                 print(f"自动登录失败: {result.get('message')}")
         except Exception as e:
             print(f"读取自动登录信息失败: {e}")
+
+    # ===== 新增：好友消息提醒相关 =====
+    def init_message_checker(self):
+        """初始化并启动好友消息轮询（登录后自动启动）"""
+        try:
+            if not self.message_check_timer:
+                self.message_check_timer = QTimer(self)
+                # 默认每5秒检查一次
+                self.message_check_timer.setInterval(5000)
+                self.message_check_timer.timeout.connect(self.check_new_messages)
+            # 用户已登录时才启动
+            if user_auth.get_current_user():
+                self.message_check_timer.start()
+        except Exception as e:
+            print(f"初始化消息轮询失败: {e}")
+
+    def _get_friend_name(self, friend_id: str) -> str:
+        """根据好友ID获取用户名（带缓存）"""
+        try:
+            if friend_id in self.friend_name_cache:
+                return self.friend_name_cache[friend_id]
+            # 拉取好友列表并缓存
+            result = friends_manager.get_friends_list()
+            if result.get('success'):
+                friends = result.get('friends', [])
+                for f in friends:
+                    fid = f.get('id') or f.get('user_id') or f.get('friend_id')
+                    if fid:
+                        self.friend_name_cache[fid] = f.get('username') or f.get('name') or fid
+                if friend_id in self.friend_name_cache:
+                    return self.friend_name_cache[friend_id]
+        except Exception as e:
+            print(f"获取好友昵称失败: {e}")
+        # 兜底返回ID
+        return friend_id
+
+    def show_friend_message_bubble(self, friend_id: str, friend_username: str, message_content: str):
+        """显示好友消息气泡，按钮为“回复”，点击后打开聊天窗口"""
+        try:
+            # 将宠物名字替换为好友昵称
+            display_content = f"{friend_username}：\n    {message_content}" if friend_username else message_content
+            # 创建漫画气泡对话框（按钮文案为“回复”）
+            bubble = SpeechBubbleDialog("", display_content, self, button_text="回复")
+
+            # 计算展示位置（宠物正上方）——与提醒一致
+            pet_pos = self.pos()
+            rect = self._available_rect()
+
+            bubble_w, bubble_h = bubble.width(), bubble.height()
+
+            # 计算宠物头顶中央位置
+            pet_center_x = pet_pos.x() + self.width() // 2
+            pet_top_y = pet_pos.y()
+
+            # 气泡位置：以宠物头顶中央为锚点，气泡在正上方
+            bx = pet_center_x - bubble_w // 2
+            by = pet_top_y - bubble_h - 5
+
+            # 边界处理
+            if bx < rect.left() + 10:
+                bx = rect.left() + 10
+            elif bx + bubble_w > rect.right() - 10:
+                bx = rect.right() - bubble_w - 10
+            if by < rect.top() + 10:
+                by = pet_pos.y() + self.height() + 5
+            if by + bubble_h > rect.bottom() - 10:
+                by = rect.bottom() - bubble_h - 10
+
+            bubble.move(bx, by)
+            res = bubble.exec_()
+            if res == QDialog.Accepted:
+                # 打开聊天窗口进行回复
+                self.on_chat_requested(friend_id, friend_username)
+        except Exception as e:
+            print(f"show_friend_message_bubble error: {e}")
+
+    def check_new_messages(self):
+        """轮询检查是否有新的未读消息，如有则弹出气泡提醒"""
+        try:
+            current_user = user_auth.get_current_user()
+            if not current_user:
+                return
+            user_id = current_user.get('id')
+            if not user_id:
+                return
+            # 查询最近会话，包含未读数
+            conversations = chat_db.get_recent_conversations(user_id, limit=20)
+            # 遍历所有会话，找出未读且对方最近发来的消息
+            for conv in conversations:
+                other_id = conv.get('other_user_id')
+                unread = int(conv.get('unread_count') or 0)
+                is_last_sent = bool(conv.get('is_last_sent'))  # True表示我发的
+                last_message = conv.get('last_message') or ""
+                if not other_id or unread <= 0 or is_last_sent:
+                    # 如果之前记录了通知但现在未读为0，则清理记录
+                    if other_id in self.notified_senders and unread <= 0:
+                        self.notified_senders.discard(other_id)
+                    continue
+                # 避免重复弹相同发送者的未读提醒（直到其未读清零）
+                if other_id in self.notified_senders:
+                    continue
+                # 获取好友昵称
+                friend_name = self._get_friend_name(other_id)
+                # 弹出气泡
+                self.show_friend_message_bubble(other_id, friend_name, last_message)
+                # 标记为已通知，避免短时间重复打扰
+                self.notified_senders.add(other_id)
+                # 一次仅弹一个，避免堆叠
+                break
+        except Exception as e:
+            print(f"check_new_messages error: {e}")
