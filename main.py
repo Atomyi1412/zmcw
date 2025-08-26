@@ -23,6 +23,20 @@ except (ImportError, AttributeError):
 # 添加当前目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 在macOS打包环境下，确保Resources与Frameworks目录在Python搜索路径中（修复某些环境下第三方包如bcrypt无法导入问题）
+try:
+    if getattr(sys, 'frozen', False) and sys.platform == 'darwin':
+        exe_dir = os.path.dirname(sys.executable)  # .../Contents/MacOS
+        contents_dir = os.path.abspath(os.path.join(exe_dir, '..'))  # .../Contents
+        resources_dir = os.path.join(contents_dir, 'Resources')
+        frameworks_dir = os.path.join(contents_dir, 'Frameworks')
+        lib_dynload_dir = os.path.join(frameworks_dir, 'lib-dynload')
+        for p in (resources_dir, frameworks_dir, lib_dynload_dir):
+            if os.path.isdir(p) and p not in sys.path:
+                sys.path.insert(0, p)
+except Exception:
+    pass
+
 # 资源路径（兼容 PyInstaller）
 def resource_path(relative_path: str) -> str:
     try:
