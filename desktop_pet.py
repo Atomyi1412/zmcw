@@ -42,10 +42,10 @@ class SpeechBubbleDialog(QDialog):
         self.title = title
         self.content = content
         # 改为自适应尺寸：设定最小/最大宽度区间
-        self.min_width = 240
-        self.max_width = 360
-        self.radius = 14
-        self.tail_size = 16  # 小尾巴尺寸
+        self.min_width = 260
+        self.max_width = 380
+        self.radius = 16
+        self.tail_size = 18  # 小尾巴尺寸
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setModal(True)
@@ -56,36 +56,58 @@ class SpeechBubbleDialog(QDialog):
 
         # 中心内容区域
         layout = QVBoxLayout()
-        layout.setContentsMargins(18, 16, 18, 22)  # 底部增加边距为尾巴留空间
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 24, 24, 30)  # 增加边距，底部留出尾巴空间
+        layout.setSpacing(12)
 
-        # 移除标题显示
+        # 标题显示（如果存在）
+        if self.title:
+            title_label = QLabel(self.title)
+            title_font = QFont("Microsoft YaHei", 14, QFont.Bold)
+            title_label.setFont(title_font)
+            title_label.setStyleSheet("color: #333333;")
+            layout.addWidget(title_label)
 
         content_label = QLabel(self.content)
         content_label.setWordWrap(True)
-        content_font = QFont()
-        content_font.setPointSize(14)  # 内容更大
+        content_font = QFont("Microsoft YaHei", 13)  # 使用微软雅黑，字号适中
         content_label.setFont(content_font)
-        content_label.setStyleSheet("color: #4a4a4a;")
+        # 增加行高和颜色
+        content_label.setStyleSheet("""
+            QLabel {
+                color: #555555;
+                line-height: 1.5;
+            }
+        """)
         content_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        content_label.setMaximumWidth(self.max_width - 36)
+        content_label.setMaximumWidth(self.max_width - 48)
 
         btn = QPushButton("知道啦")
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setFixedHeight(34)
-        btn_font = QFont()
-        btn_font.setPointSize(12)
+        btn.setFixedHeight(36)
+        btn_font = QFont("Microsoft YaHei", 11)
         btn.setFont(btn_font)
+        # 优化按钮样式：柔和的蓝色，增加阴影和过渡
         btn.setStyleSheet(
             """
-            QPushButton { background: #4C9AFF; color: white; border: none; border-radius: 6px; padding: 8px 16px; }
-            QPushButton:hover { background: #3F84E5; }
-            QPushButton:pressed { background: #376FC7; }
+            QPushButton { 
+                background-color: #5B9BD5; 
+                color: white; 
+                border: none; 
+                border-radius: 18px; 
+                padding: 5px 20px;
+                font-weight: bold;
+            }
+            QPushButton:hover { 
+                background-color: #4A8AC4; 
+            }
+            QPushButton:pressed { 
+                background-color: #376FC7; 
+                padding-top: 7px; /* 按下时微动 */
+            }
             """
         )
         btn.clicked.connect(self.accept)
 
-        # 不再添加标题标签
         layout.addWidget(content_label, 1)
         hl = QHBoxLayout()
         hl.addStretch()
@@ -106,42 +128,44 @@ class SpeechBubbleDialog(QDialog):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setOpacity(1.0)
 
-        # 阴影层（稍大、透明）
+        # 阴影层（更柔和）
         shadow_path = QPainterPath()
-        rect = QRectF(self.rect()).adjusted(2, 2, -2, -2)
+        rect = QRectF(self.rect()).adjusted(4, 4, -4, -4)
         # 主体区域（预留底部给尾巴）
         bubble_rect = rect.adjusted(0, 0, 0, -self.tail_size)
         shadow_path.addRoundedRect(bubble_rect, self.radius, self.radius)
-        painter.fillPath(shadow_path, QColor(0, 0, 0, 50))
+        painter.fillPath(shadow_path, QColor(0, 0, 0, 30))  # 更淡的阴影
 
         # 真正的白色气泡
         bubble_path = QPainterPath()
-        bubble_rect2 = QRectF(self.rect()).adjusted(0, 0, 0, -self.tail_size)  # 在底部留出尾巴区域
-        bubble_path.addRoundedRect(bubble_rect2, self.radius, self.radius)
+        # 稍微偏移一点以显示阴影效果，但不完全重叠
+        draw_rect = QRectF(self.rect()).adjusted(2, 2, -6, -6 - self.tail_size)
+        bubble_path.addRoundedRect(draw_rect, self.radius, self.radius)
         
         # 小尾巴：位于底部中央，朝下指向宠物头顶
         tail = QPainterPath()
-        center_x = self.width() // 2  # 底部中央位置
-        tail_base_y = self.height() - self.tail_size
-        tail_left = QPointF(center_x - 8, tail_base_y)
-        tail_right = QPointF(center_x + 8, tail_base_y)
-        tail_tip = QPointF(center_x, self.height() - 2)  # 尖端朝下
+        center_x = self.width() // 2
+        tail_base_y = draw_rect.bottom()
+        tail_left = QPointF(center_x - 10, tail_base_y)
+        tail_right = QPointF(center_x + 10, tail_base_y)
+        tail_tip = QPointF(center_x, tail_base_y + self.tail_size)  # 尖端朝下
+        
         tail.moveTo(tail_left)
         tail.lineTo(tail_right)
         tail.lineTo(tail_tip)
         tail.closeSubpath()
+        
+        # 合并路径以便绘制统一的边框和填充
+        combined_path = bubble_path.united(tail)
 
-        painter.fillPath(bubble_path, QColor(255, 255, 255))
-        painter.fillPath(tail, QColor(255, 255, 255))
+        # 填充白色背景
+        painter.fillPath(combined_path, QColor(255, 255, 255))
 
-        # 粗黑边框
-        from PyQt5.QtGui import QPen
-        from PyQt5.QtCore import Qt as QtCore
-        pen = QPen(QColor(0, 0, 0), 3)  # 黑色，3像素粗
-        pen.setJoinStyle(QtCore.RoundJoin)  # 圆角连接
+        # 绘制边框（深灰色，细一点）
+        pen = QPen(QColor(80, 80, 80), 2)
+        pen.setJoinStyle(Qt.RoundJoin)
         painter.setPen(pen)
-        painter.drawRoundedRect(bubble_rect2, self.radius, self.radius)
-        painter.drawPath(tail)
+        painter.drawPath(combined_path)
 
 class DesktopPet(QWidget):
     """桌面宠物主窗口类"""

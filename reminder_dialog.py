@@ -64,28 +64,66 @@ class ReminderDialog(QDialog):
 
     def setup_ui(self):
         """设置界面布局"""
+        # 设置全局样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #F8F9FA;
+            }
+            QLabel {
+                font-family: "Microsoft YaHei";
+                color: #333333;
+                font-size: 14px;
+            }
+            QLineEdit, QTimeEdit, QSpinBox, QComboBox {
+                font-family: "Microsoft YaHei";
+                font-size: 14px;
+                border: 1px solid #CCCCCC;
+                border-radius: 4px;
+                padding: 4px 8px;
+                background-color: white;
+                selection-background-color: #5B9BD5;
+            }
+            QLineEdit:focus, QTimeEdit:focus, QSpinBox:focus, QComboBox:focus {
+                border: 1px solid #5B9BD5;
+            }
+            QRadioButton {
+                font-family: "Microsoft YaHei";
+                font-size: 14px;
+                color: #333333;
+                spacing: 8px;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+            }
+            QPushButton {
+                font-family: "Microsoft YaHei";
+                font-size: 14px;
+                border-radius: 18px;
+                padding: 6px 16px;
+                min-height: 24px;
+                font-weight: bold;
+            }
+        """)
+
         # 创建主布局
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(4)  # 更紧凑的行间距
-        main_layout.setContentsMargins(8, 6, 8, 6)  # 左右8，上下6，进一步减少留白
+        main_layout.setSpacing(16)  # 增加间距
+        main_layout.setContentsMargins(24, 24, 24, 24)  # 增加边距
         
         # 标题标签
         title_label = QLabel('设置提醒')
-        title_font = QFont()
-        title_font.setPointSize(15)
-        title_font.setBold(True)
+        title_font = QFont("Microsoft YaHei", 18, QFont.Bold)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
-        # main_layout.addWidget(title_label)
+        title_label.setStyleSheet("color: #333333; margin-bottom: 8px;")
+        main_layout.addWidget(title_label)
         
-        # 提醒类型选择区域（单行：标签 + 单选按钮）
+        # 提醒类型选择区域
         type_layout = QHBoxLayout()
-        type_layout.setSpacing(6)
+        type_layout.setSpacing(12)
         type_title = QLabel('提醒类型:')
-        type_title_font = QFont()
-        type_title_font.setPointSize(15)
-        type_title.setFont(type_title_font)
-        type_title.setMinimumWidth(72)
+        type_title.setMinimumWidth(80)
         
         # 创建单选按钮组
         self.reminder_type_group = QButtonGroup()
@@ -93,10 +131,10 @@ class ReminderDialog(QDialog):
         self.repeat_radio = QRadioButton('循环提醒')
         self.relative_radio = QRadioButton('延迟提醒')
         self.single_radio.setChecked(True)
-        radio_font = QFont(); radio_font.setPointSize(15)
-        self.single_radio.setFont(radio_font)
-        self.repeat_radio.setFont(radio_font)
-        self.relative_radio.setFont(radio_font)
+        self.single_radio.setCursor(Qt.PointingHandCursor)
+        self.repeat_radio.setCursor(Qt.PointingHandCursor)
+        self.relative_radio.setCursor(Qt.PointingHandCursor)
+        
         self.reminder_type_group.addButton(self.single_radio, 0)
         self.reminder_type_group.addButton(self.repeat_radio, 1)
         self.reminder_type_group.addButton(self.relative_radio, 2)
@@ -112,19 +150,14 @@ class ReminderDialog(QDialog):
         
         # 时间选择区域（单次提醒）
         self.time_layout = QHBoxLayout()
-        self.time_layout.setSpacing(4)
+        self.time_layout.setSpacing(12)
         time_label = QLabel('提醒时间:')
-        time_label.setMinimumWidth(72)
-        time_label_font = QFont()
-        time_label_font.setPointSize(15)
-        time_label.setFont(time_label_font)
+        time_label.setMinimumWidth(80)
         self.time_edit = QTimeEdit()
         self.time_edit.setDisplayFormat('HH:mm')
         self.time_edit.setTime(QTime.currentTime().addSecs(300))
-        self.time_edit.setMinimumHeight(32)
-        self.time_edit.setMinimumWidth(112)
-        time_edit_font = QFont(); time_edit_font.setPointSize(15)
-        self.time_edit.setFont(time_edit_font)
+        self.time_edit.setMinimumHeight(36)
+        self.time_edit.setMinimumWidth(120)
         self.time_layout.addWidget(time_label)
         self.time_layout.addWidget(self.time_edit)
         self.time_layout.addStretch()
@@ -132,25 +165,18 @@ class ReminderDialog(QDialog):
         
         # 循环提醒频率设置区域
         self.interval_layout = QHBoxLayout()
-        self.interval_layout.setSpacing(4)
+        self.interval_layout.setSpacing(12)
         self.interval_label = QLabel('提醒间隔:')
-        self.interval_label.setMinimumWidth(72)
-        interval_label_font = QFont()
-        interval_label_font.setPointSize(15)
-        self.interval_label.setFont(interval_label_font)
+        self.interval_label.setMinimumWidth(80)
         self.interval_spinbox = QSpinBox()
         self.interval_spinbox.setRange(1, 999)
         self.interval_spinbox.setValue(1)
-        self.interval_spinbox.setMinimumHeight(32)
-        self.interval_spinbox.setMinimumWidth(72)
-        interval_spin_font = QFont(); interval_spin_font.setPointSize(15)
-        self.interval_spinbox.setFont(interval_spin_font)
+        self.interval_spinbox.setMinimumHeight(36)
+        self.interval_spinbox.setMinimumWidth(80)
         self.interval_unit_combo = QComboBox()
         self.interval_unit_combo.addItems(['分钟', '小时'])
-        self.interval_unit_combo.setMinimumHeight(32)
-        self.interval_unit_combo.setMinimumWidth(72)
-        interval_unit_font = QFont(); interval_unit_font.setPointSize(15)
-        self.interval_unit_combo.setFont(interval_unit_font)
+        self.interval_unit_combo.setMinimumHeight(36)
+        self.interval_unit_combo.setMinimumWidth(80)
         self.interval_layout.addWidget(self.interval_label)
         self.interval_layout.addWidget(self.interval_spinbox)
         self.interval_layout.addWidget(self.interval_unit_combo)
@@ -159,25 +185,18 @@ class ReminderDialog(QDialog):
         
         # 相对时间提醒设置区域
         self.relative_layout = QHBoxLayout()
-        self.relative_layout.setSpacing(4)
+        self.relative_layout.setSpacing(12)
         self.relative_label = QLabel('延迟时间:')
-        self.relative_label.setMinimumWidth(72)
-        relative_label_font = QFont()
-        relative_label_font.setPointSize(15)
-        self.relative_label.setFont(relative_label_font)
+        self.relative_label.setMinimumWidth(80)
         self.relative_spinbox = QSpinBox()
         self.relative_spinbox.setRange(1, 999)
         self.relative_spinbox.setValue(5)
-        self.relative_spinbox.setMinimumHeight(32)
-        self.relative_spinbox.setMinimumWidth(72)
-        relative_spin_font = QFont(); relative_spin_font.setPointSize(15)
-        self.relative_spinbox.setFont(relative_spin_font)
+        self.relative_spinbox.setMinimumHeight(36)
+        self.relative_spinbox.setMinimumWidth(80)
         self.relative_unit_combo = QComboBox()
         self.relative_unit_combo.addItems(['秒', '分钟', '小时'])
-        self.relative_unit_combo.setMinimumHeight(32)
-        self.relative_unit_combo.setMinimumWidth(72)
-        relative_unit_font = QFont(); relative_unit_font.setPointSize(15)
-        self.relative_unit_combo.setFont(relative_unit_font)
+        self.relative_unit_combo.setMinimumHeight(36)
+        self.relative_unit_combo.setMinimumWidth(80)
         self.relative_layout.addWidget(self.relative_label)
         self.relative_layout.addWidget(self.relative_spinbox)
         self.relative_layout.addWidget(self.relative_unit_combo)
@@ -188,31 +207,58 @@ class ReminderDialog(QDialog):
         self.toggle_interval_controls(False)
         self.toggle_relative_controls(False)
         
-        # 内容输入区域 -> 横向单行：标签 + 输入框
+        # 内容输入区域
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(6)
+        content_layout.setSpacing(12)
         content_label = QLabel('提醒内容:')
-        content_label_font = QFont()
-        content_label_font.setPointSize(15)
-        content_label.setFont(content_label_font)
-        content_label.setMinimumWidth(72)
+        content_label.setMinimumWidth(80)
         self.content_edit = QLineEdit()
         self.content_edit.setPlaceholderText('请输入提醒内容...')
-        content_font = QFont(); content_font.setPointSize(15)
-        self.content_edit.setFont(content_font)
-        self.content_edit.setMinimumHeight(32)
+        self.content_edit.setMinimumHeight(36)
         content_layout.addWidget(content_label)
         content_layout.addWidget(self.content_edit)
         main_layout.addLayout(content_layout)
         
+        # 弹性空间
+        main_layout.addStretch()
+        
         # 确认和取消按钮区域
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(8)
+        button_layout.setSpacing(16)
         button_layout.addStretch()
         self.cancel_button = QPushButton('取消')
-        self.cancel_button.setMinimumSize(86, 32)
+        self.cancel_button.setCursor(Qt.PointingHandCursor)
+        self.cancel_button.setMinimumSize(90, 36)
+        self.cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #E0E0E0;
+                color: #333333;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #D0D0D0;
+            }
+            QPushButton:pressed {
+                background-color: #C0C0C0;
+            }
+        """)
+        
         self.confirm_button = QPushButton('确定')
-        self.confirm_button.setMinimumSize(86, 32)
+        self.confirm_button.setCursor(Qt.PointingHandCursor)
+        self.confirm_button.setMinimumSize(90, 36)
+        self.confirm_button.setStyleSheet("""
+            QPushButton {
+                background-color: #5B9BD5;
+                color: white;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #4A8AC4;
+            }
+            QPushButton:pressed {
+                background-color: #376FC7;
+            }
+        """)
         
         # 新增：连接按钮信号
         self.cancel_button.clicked.connect(self.safe_reject)

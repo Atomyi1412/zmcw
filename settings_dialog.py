@@ -46,56 +46,134 @@ class SettingsDialog(QDialog):
         """
         设置用户界面
         """
+        # 设置全局样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #F8F9FA;
+            }
+            QGroupBox {
+                font-family: "Microsoft YaHei";
+                font-size: 15px;
+                font-weight: bold;
+                border: 1px solid #DDDDDD;
+                border-radius: 6px;
+                margin-top: 12px;
+                background-color: white;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                left: 10px;
+                color: #555555;
+            }
+            QLabel {
+                font-family: "Microsoft YaHei";
+                color: #333333;
+                font-size: 14px;
+            }
+            QCheckBox {
+                font-family: "Microsoft YaHei";
+                font-size: 14px;
+                color: #333333;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 1px solid #CCCCCC;
+                border-radius: 3px;
+                background-color: white;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #5B9BD5;
+                border: 1px solid #5B9BD5;
+                image: url(assets/check_icon.png); /* 假如没有图片，纯色也行 */
+            }
+            QLineEdit {
+                font-family: "Microsoft YaHei";
+                font-size: 14px;
+                border: 1px solid #CCCCCC;
+                border-radius: 4px;
+                padding: 6px 8px;
+                background-color: white;
+            }
+            QLineEdit:focus {
+                border: 1px solid #5B9BD5;
+            }
+            QPushButton {
+                font-family: "Microsoft YaHei";
+                font-size: 14px;
+                border-radius: 18px;
+                padding: 6px 16px;
+                min-height: 24px;
+                font-weight: bold;
+            }
+        """)
+
         self.setWindowTitle("桌面宠物设置")
-        self.setFixedSize(PetConfig.SETTINGS_DIALOG_WIDTH, PetConfig.SETTINGS_DIALOG_HEIGHT)
+        # 移除固定大小，使用最小大小并允许自适应
+        # self.setFixedSize(PetConfig.SETTINGS_DIALOG_WIDTH, PetConfig.SETTINGS_DIALOG_HEIGHT + 40)
+        self.setMinimumWidth(PetConfig.SETTINGS_DIALOG_WIDTH)
         self.setWindowFlags(Qt.Dialog | Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint)
         
         # 主布局
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(14)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(24, 24, 24, 24)
         
-        # （移除与窗口标题重复的居中标题标签）
+        # 标题标签
+        title_label = QLabel('设置')
+        title_font = QFont("Microsoft YaHei", 18, QFont.Bold)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("color: #333333; margin-bottom: 4px;")
+        main_layout.addWidget(title_label)
         
         # 显示设置组
         display_group = QGroupBox("显示设置")
         display_layout = QVBoxLayout()
-        display_layout.setSpacing(12)
-        display_layout.setContentsMargins(12, 14, 12, 12)
+        display_layout.setSpacing(14)
+        display_layout.setContentsMargins(16, 24, 16, 16)
         
         # 置顶选项
         self.always_on_top_checkbox = QCheckBox("始终置顶显示")
+        self.always_on_top_checkbox.setCursor(Qt.PointingHandCursor)
         self.always_on_top_checkbox.setToolTip("勾选后，桌面宠物将始终显示在其他程序窗口之上")
         display_layout.addWidget(self.always_on_top_checkbox)
         
         # 开机自启动
         self.auto_start_checkbox = QCheckBox("开机自启动")
+        self.auto_start_checkbox.setCursor(Qt.PointingHandCursor)
         self.auto_start_checkbox.setToolTip("勾选后，系统登录时自动启动桌面宠物")
         display_layout.addWidget(self.auto_start_checkbox)
         
         # 自动下落选项
         self.auto_fall_checkbox = QCheckBox("自动下落（松手后从上半区下落）")
+        self.auto_fall_checkbox.setCursor(Qt.PointingHandCursor)
         self.auto_fall_checkbox.setToolTip("关闭后，松手将不触发自动下落动画")
         display_layout.addWidget(self.auto_fall_checkbox)
         
         # 宠物大小（缩放）
         size_widget = QWidget()
         size_layout = QVBoxLayout(size_widget)
-        size_layout.setSpacing(6)
-        size_layout.setContentsMargins(0, 0, 0, 0)
+        size_layout.setSpacing(8)
+        size_layout.setContentsMargins(0, 4, 0, 0)
         # 顶部信息行：说明 + 右侧百分比
         info_row = QHBoxLayout()
         info_row.setSpacing(8)
         self.size_help_label = QLabel("大小调整（当前 100%）")
-        help_font = QFont()
-        help_font.setPointSize(11)
+        help_font = QFont("Microsoft YaHei", 13)
         self.size_help_label.setFont(help_font)
-        self.size_help_label.setWordWrap(True)
-        info_row.addWidget(self.size_help_label)
-        info_row.addStretch(1)
+        # 移除自动折行，避免占用过多垂直空间
+        self.size_help_label.setWordWrap(False)
+        info_row.addWidget(self.size_help_label, 1) # 添加拉伸因子，占据主要空间
+        
         self.pet_scale_value_label = QLabel("100%")
+        self.pet_scale_value_label.setFont(QFont("Microsoft YaHei", 13, QFont.Bold))
+        self.pet_scale_value_label.setStyleSheet("color: #5B9BD5;")
         self.pet_scale_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.pet_scale_value_label.setMinimumWidth(48)
+        self.pet_scale_value_label.setMinimumWidth(50) # 稍微增加宽度
         info_row.addWidget(self.pet_scale_value_label)
         size_layout.addLayout(info_row)
 
@@ -103,13 +181,14 @@ class SettingsDialog(QDialog):
         slider_row = QHBoxLayout()
         slider_row.setContentsMargins(0, 0, 0, 0)
         self.pet_scale_slider = QSlider(Qt.Horizontal)
+        self.pet_scale_slider.setCursor(Qt.PointingHandCursor)
         self.pet_scale_slider.setMinimum(int(PetConfig.MIN_PET_SCALE * 100))
         self.pet_scale_slider.setMaximum(int(PetConfig.MAX_PET_SCALE * 100))
         self.pet_scale_slider.setSingleStep(5)
         self.pet_scale_slider.setPageStep(10)
         self.pet_scale_slider.setTickPosition(QSlider.TicksBelow)
         self.pet_scale_slider.setTickInterval(10)
-        self.pet_scale_slider.setFixedHeight(22)
+        self.pet_scale_slider.setFixedHeight(24)
         self.pet_scale_slider.setToolTip(f"拖动以调整宠物显示比例（{int(PetConfig.MIN_PET_SCALE * 100)}% - {int(PetConfig.MAX_PET_SCALE * 100)}%）")
         slider_row.addWidget(self.pet_scale_slider)
         size_layout.addLayout(slider_row)
@@ -122,26 +201,19 @@ class SettingsDialog(QDialog):
         # 个性化设置组：宠物名称
         personalize_group = QGroupBox("个性化")
         personalize_layout = QVBoxLayout()
-        personalize_layout.setContentsMargins(15, 18, 15, 15)
-        personalize_layout.setSpacing(10)
+        personalize_layout.setContentsMargins(16, 24, 16, 16)
+        personalize_layout.setSpacing(12)
         
         name_row = QHBoxLayout()
-        name_row.setContentsMargins(0, 8, 0, 8)
+        name_row.setContentsMargins(0, 0, 0, 0)
         name_row.setSpacing(12)
         name_label = QLabel("宠物名称：")
+        name_label.setFixedWidth(75)
         self.pet_name_edit = QLineEdit()
         self.pet_name_edit.setPlaceholderText("给你的宠物取个名字吧，例如：小乔治")
-        # 本段使用的通用字体
-        font = QFont()
-        font.setPointSize(12)
-        # 设置输入框字体
-        self.pet_name_edit.setFont(font)
-        name_label.setFont(font)
-        name_label.setFixedWidth(72)
-        self.pet_name_edit.setMinimumWidth(260)
+        self.pet_name_edit.setMinimumWidth(240)
         self.pet_name_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.pet_name_edit.setMinimumHeight(30)
-        self.pet_name_edit.setStyleSheet("QLineEdit { padding: 4px 8px; }")  # 避免在部分主题中背景异常
+        self.pet_name_edit.setMinimumHeight(34)
         name_row.addWidget(name_label)
         name_row.addWidget(self.pet_name_edit, 1)
         personalize_layout.addLayout(name_row)
@@ -151,15 +223,48 @@ class SettingsDialog(QDialog):
         # 弹性空间和按钮行
         main_layout.addStretch()
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(16)
         button_layout.addStretch()
         cancel_button = QPushButton("取消")
-        cancel_button.setFixedSize(80, 30)
+        cancel_button.setCursor(Qt.PointingHandCursor)
+        # 增加按钮最小宽度和高度，确保文字完整显示
+        cancel_button.setMinimumSize(100, 38)
+        cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #E0E0E0;
+                color: #333333;
+                border: none;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #D0D0D0;
+            }
+            QPushButton:pressed {
+                background-color: #C0C0C0;
+            }
+        """)
         cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(cancel_button)
+        
         ok_button = QPushButton("确定")
-        ok_button.setFixedSize(80, 30)
+        ok_button.setCursor(Qt.PointingHandCursor)
+        # 增加按钮最小宽度和高度
+        ok_button.setMinimumSize(100, 38)
         ok_button.setDefault(True)
+        ok_button.setStyleSheet("""
+            QPushButton {
+                background-color: #5B9BD5;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #4A8AC4;
+            }
+            QPushButton:pressed {
+                background-color: #376FC7;
+            }
+        """)
         ok_button.clicked.connect(self.accept_settings)
         button_layout.addWidget(ok_button)
         main_layout.addLayout(button_layout)
@@ -168,6 +273,15 @@ class SettingsDialog(QDialog):
         # 样式：使用系统原生样式避免控件不可见
         self.setStyleSheet("")
         
+        # 强制调整大小以适应内容
+        self.adjustSize()
+
+    def showEvent(self, event):
+        """窗口显示事件，确保布局正确计算"""
+        super().showEvent(event)
+        # 再次强制调整大小，确保所有控件（尤其是高DPI下）都完全展开
+        self.adjustSize()
+
     def on_scale_changed(self, v: int):
         """滑块变化时，更新百分比标签、说明文字与 tooltip。"""
         try:
